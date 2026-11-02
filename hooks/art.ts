@@ -9,11 +9,13 @@ export type Art = { source: string; width: number; height: number }
 export type Version = { tested: string; actual: string | null }
 
 /**
- * CSS pixels per cell. Svg sizes are CSS pixels while bodyColumns counts cells of the
- * surface's code font; the desktop's code font advance is 12 px. Width = columns * 12,
- * so the art never runs past its slot (an Svg wider than the slot is scaled down).
+ * CSS pixels per cell. Svg sizes are CSS pixels while bodyColumns counts cells; the types
+ * give no pixel size for a cell. Measured on the desktop app (CJ's PC): the band slot is
+ * about 750 px at 99 columns and the docked pane about 320 px at 64 columns. An Svg wider
+ * than its slot is scaled down (and looks small), so these sit just under the slot.
  */
-export const CELL_PX = 12
+export const BAND_CELL_PX = 7.5
+export const PANE_CELL_PX = 5
 /** The band is about two text rows tall. */
 export const BAND_H = 44
 
@@ -330,11 +332,11 @@ function divider(x: number, h: number, p: Palette): string {
   return `<rect x="${r1(x)}" y="9" width="1" height="${h - 18}" fill="${p.divider}"/>`
 }
 
-/** The strip above the prompt: one row of three blocks, BAND_H tall, columns * CELL_PX wide. */
+/** The strip above the prompt: one row of three blocks, BAND_H tall, columns * BAND_CELL_PX wide. */
 export function bandSvg(v: View, columns: number, theme: ArtTheme, dark: boolean): Art {
   const p = palette(theme, dark)
   const k = kitOf(theme, dark, 'b')
-  const W = Math.max(60, Math.floor(columns) * CELL_PX)
+  const W = Math.max(60, Math.floor(Math.floor(columns) * BAND_CELL_PX))
   const H = BAND_H
   const pad = W < 420 ? 10 : 16
   const gap = W < 420 ? 14 : 28
@@ -373,7 +375,7 @@ export function bandSvg(v: View, columns: number, theme: ArtTheme, dark: boolean
 export function paneSvg(v: View, columns: number, theme: ArtTheme, dark: boolean, version: Version): Art {
   const p = palette(theme, dark)
   const k = kitOf(theme, dark, 'p')
-  const W = Math.max(120, Math.floor(columns) * CELL_PX)
+  const W = Math.max(120, Math.floor(Math.floor(columns) * PANE_CELL_PX))
   const narrow = W < 360
   const pad = narrow ? 14 : 24
   const big = narrow ? 24 : 34

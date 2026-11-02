@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { CacheView, View, WindowView } from './data'
-import { BAND_H, CELL_PX, altText, bandSvg, esc, palette, paneSvg } from './art'
+import { BAND_CELL_PX, BAND_H, PANE_CELL_PX, altText, bandSvg, esc, palette, paneSvg } from './art'
 import type { ArtTheme, Palette } from './art'
 
 const M = 60_000
@@ -70,15 +70,20 @@ test('every state, theme, scheme and width draws well-formed SVG under 20 KB', (
   }
 })
 
-test('width is columns times the cell size; the band is about two rows tall', () => {
+test('width follows the measured cell sizes; the band is about two rows tall', () => {
+  // Measured on the desktop app: band about 750 px at 99 columns, pane about 320 px at 64.
+  expect(bandSvg(base(), 99, 'christmas', true).width).toBe(742)
+  expect(paneSvg(base(), 64, 'christmas', true, VER).width).toBe(320)
   for (const cols of [24, 64, 99]) {
+    const bw = Math.max(60, Math.floor(cols * BAND_CELL_PX))
     const b = bandSvg(base(), cols, 'christmas', true)
-    expect(b.width).toBe(cols * CELL_PX)
+    expect(b.width).toBe(bw)
     expect(b.height).toBe(BAND_H)
-    expect(b.source).toContain(`width="${cols * CELL_PX}" height="${BAND_H}" viewBox="0 0 ${cols * CELL_PX} ${BAND_H}"`)
+    expect(b.source).toContain(`width="${bw}" height="${BAND_H}" viewBox="0 0 ${bw} ${BAND_H}"`)
+    const pw = Math.max(120, Math.floor(cols * PANE_CELL_PX))
     const p = paneSvg(base(), cols, 'christmas', true, VER)
-    expect(p.width).toBe(cols * CELL_PX)
-    expect(p.source).toContain(`viewBox="0 0 ${cols * CELL_PX} ${p.height}"`)
+    expect(p.width).toBe(pw)
+    expect(p.source).toContain(`viewBox="0 0 ${pw} ${p.height}"`)
   }
 })
 
