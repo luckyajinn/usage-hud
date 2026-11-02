@@ -1,0 +1,25 @@
+{
+  "name": "usage-hud",
+  "version": "0.2.0",
+  "description": "Shows 5-hour and 7-day usage left with reset times, and whether the prompt cache is hot or cold",
+  "author": {
+    "name": "CJ"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "cacheTtl": {
+      "type": "string",
+      "title": "Prompt cache TTL",
+      "description": "auto uses 1h until Claude Code reports a different TTL; 5m or 1h forces it",
+      "options": [
+        "auto",
+        "5m",
+        "1h"
+      ],
+      "default": "auto"
+    }
+  },
+  "repository": "https://github.com/luckyajinn/usage-hud",
+  "homepage": "https://github.com/luckyajinn/usage-hud"
+}

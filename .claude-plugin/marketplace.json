@@ -1,0 +1,6 @@
+{
+  "name": "cj-mods",
+  "owner": { "name": "CJ" },
+  "description": "CJ's local Claude Code mods",
+  "plugins": [{ "name": "usage-hud", "source": "./", "description": "5-hour and 7-day usage left, reset times, and prompt cache hot or cold" }]
+}
