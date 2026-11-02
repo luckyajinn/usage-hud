@@ -47,18 +47,30 @@ Then start a new session. In the desktop app, use a local Code session.
 |---|---|
 | Terminal (`claude`) | Strip above the prompt; pane in fullscreen at 110+ columns |
 | Desktop app, local Code session | Strip above the message box; pane docked on the right |
-| Cloud session (claude.ai/code or viewed in the desktop app) | Installs and runs; the strip and pane are not drawn today (see below). `/usage-hud` may answer as text |
+| Cloud session (claude.ai/code or viewed in the desktop app) | Installs and runs, but nothing is shown today (see Cloud sessions) |
 
 ## Cloud sessions
 
-A cloud session starts from a fresh machine, so install the mod in the environment's setup script:
+Short version: it installs and runs in a cloud session, but the strip and the pane do not show there today.
+
+Why: mods draw only on a screen that is connected to the session (a terminal, or the desktop app running a local Code session). When you open a cloud session in the desktop app or on claude.ai/code, the app does not connect its screen to that session for mods, so there is nothing to draw on. This is a limit of the app, not of this mod; other mods (for example ribbon) behave the same way.
+
+| In a cloud session | Status |
+|---|---|
+| Install from the setup script | Works (tested) |
+| Mod loads and tracks usage and cache | Works (tested) |
+| Strip above the message box | Not shown today |
+| Docked pane | Not shown today |
+| `/usage-hud` text readout | Not tested yet |
+
+To install it in every new cloud session, add these two lines to your cloud environment's setup script (environment settings, Setup script):
 
 ```
 claude plugin marketplace add luckyajinn/usage-hud
 claude plugin install usage-hud@cj-mods --scope user
 ```
 
-Honest status: the app does not attach a drawing surface to cloud sessions for mods today, so the strip and the pane do not draw there. `/usage-hud` answers its text readout without any surface, so it may be the one readout that reaches a cloud session. If a client attaches later (the app connects, or a phone opens the session), the mod opens its pane once and draws the strip then.
+Ready for later: if the app starts connecting its screen to cloud sessions, the mod notices the moment that happens and opens the pane and strip, with no update needed. On a phone it never opens the pane by itself, so it cannot take over the screen.
 
 ## Cache estimate
 
@@ -68,6 +80,15 @@ No API reports the prompt cache directly. The mod stamps the start of each main-
 - `5m` or `1h`: forced
 
 Set it with `/plugin configure usage-hud@cj-mods` in a terminal session.
+
+## Updating
+
+```
+claude plugin marketplace update cj-mods
+claude plugin update usage-hud@cj-mods
+```
+
+Then start a new session.
 
 ## Uninstall
 
