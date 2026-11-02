@@ -390,3 +390,13 @@ test('nextWake: always within [now + 1 s, now + 60 s]', () => {
     expect(w).toBeLessThanOrEqual(NOW + MIN)
   }
 })
+
+test('nextWake: a 60 s floor (SVG themes) never wakes sooner, hot cache or close reset', () => {
+  const hotV = viewOf({ cache: stamp({ at: NOW - 2 * MIN }) })
+  expect(nextWake(hotV, NOW, null, MIN)).toBe(NOW + MIN)
+  const l = snap(NOW, 10, 20, NOW + 5 * SEC)
+  expect(nextWake(viewOf({ live: true, limits: l }), NOW, l, MIN)).toBe(NOW + MIN)
+  // Bad floors fall back to the 1 s default and never pass 60 s.
+  expect(nextWake(hotV, NOW, null, NaN)).toBe(NOW + SEC)
+  expect(nextWake(hotV, NOW, null, 10 * MIN)).toBe(NOW + MIN)
+})

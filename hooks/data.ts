@@ -167,11 +167,12 @@ export function mergeSnap(stored: LimitsSnap | null, incoming: LimitsSnap | null
 }
 
 /**
- * Next scheduler wake, epoch ms, clamped to [now + 1 s, now + 60 s].
+ * Next scheduler wake, epoch ms, clamped to [now + minMs, now + 60 s].
  * Second ticks only while the cache is hot with under 10 minutes left.
  * Only future resets count; a past resetsAt never pulls the wake closer.
+ * minMs (default 1 s): the SVG themes pass 60 s, so their art redraws at most once a minute.
  */
-export function nextWake(v: View, now: number, limits: LimitsSnap | null): number {
+export function nextWake(v: View, now: number, limits: LimitsSnap | null, minMs: number = SEC): number {
   let wake = now + MIN
   const c = v.cache
   if (c.state === 'hot') {
@@ -184,5 +185,6 @@ export function nextWake(v: View, now: number, limits: LimitsSnap | null): numbe
       if (r !== null && r > now) wake = Math.min(wake, r)
     }
   }
-  return Math.min(now + MIN, Math.max(now + SEC, wake))
+  const floor = Math.min(MIN, Math.max(SEC, Number.isFinite(minMs) ? minMs : SEC))
+  return Math.min(now + MIN, Math.max(now + floor, wake))
 }

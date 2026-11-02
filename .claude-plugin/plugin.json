@@ -1,6 +1,6 @@
 {
   "name": "usage-hud",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Shows 5-hour and 7-day usage left with reset times, and whether the prompt cache is hot or cold",
   "author": {
     "name": "CJ"
@@ -18,6 +18,17 @@
         "1h"
       ],
       "default": "auto"
+    },
+    "theme": {
+      "type": "string",
+      "title": "Look",
+      "description": "christmas or classic draw art in the desktop app, mobile and VS Code; text draws text everywhere. The terminal always draws text.",
+      "options": [
+        "christmas",
+        "classic",
+        "text"
+      ],
+      "default": "christmas"
     }
   },
   "repository": "https://github.com/luckyajinn/usage-hud",

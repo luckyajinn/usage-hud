@@ -1,6 +1,13 @@
-import { expect, mock, test } from 'claude-code/testing'
-import type { Engine } from 'claude-code/testing'
+import { expect, mock, test as kitTest } from 'claude-code/testing'
+import type { Engine, TestBody, TestOptions } from 'claude-code/testing'
 import type { On, SessionUsage } from 'claude-code'
+
+// The tests below written for the text look run with theme 'text' unless they say
+// otherwise; the art tests at the end use kitTest with the manifest default (christmas).
+function test(name: string, a: TestOptions | TestBody, b?: TestBody): void {
+  if (typeof a === 'function') kitTest(name, { options: { theme: 'text' } }, a)
+  else kitTest(name, { ...a, options: { theme: 'text', ...a.options } }, b!)
+}
 
 const NOW = Date.parse('2026-11-02T12:00:00Z')
 const MIN = 60_000
@@ -48,7 +55,7 @@ const engine = (
   const count = (k: string) => {
     calls[k] = (calls[k] ?? 0) + 1
   }
-  const fail = { storeGet: false }
+  const fail = { storeGet: false, open: false }
   on('store.get', (_, e) => {
     if (fail.storeGet) throw new TypeError('EACCES C:/Users/cj/.claude/plugins/store')
     return { value: mem[e.key] }
@@ -71,6 +78,9 @@ const engine = (
     return { cwd: e.cwd }
   })
   on('ui.open', (_, e) => {
+    if (fail.open) throw new TypeError('no surface C:/Users/cj')
+    // Like the engine: nothing is placed while no surface is attached.
+    if (surfaces.length === 0) return { value: { isPlaced: false, reason: 'no-surface' } }
     opens.push(e.id)
     return { value: { isPlaced: true } }
   })
@@ -911,4 +921,389 @@ test('turn.step: beneath throws, the error reaches the caller and the request ra
   })
   expect(failed).toBe(true)
   expect(calls).toBe(1)
+})
+
+// ---- art themes (0.3.0): kitTest, so the manifest default (christmas) applies ----
+
+const attach = ($: Engine, surface: 'desktop' | 'mobile' | 'terminal', clientId = surface + ':default') =>
+  $.session.attach({ surface, clientId })
+
+const countAttach = (on: On) => {
+  let n = 0
+  on('session.attach', (_, e) => {
+    n += 1
+    return { clientId: e.clientId }
+  })
+  return () => n
+}
+
+for (const theme of ['christmas', 'classic'] as const) {
+  kitTest(`${theme}: desktop band and pane draw Svg with the readout as alt`, { options: { theme } }, async ($, on) => {
+    engine(on, [])
+    await start($)
+    await measure($)
+    const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+    const svg = await b.find({ type: 'Svg' })
+    expect(svg?.props.width).toBe(99 * 12)
+    expect(svg?.props.height).toBe(44)
+    expect(String(svg?.props.source).startsWith('<svg ')).toBe(true)
+    expect(String(svg?.props.source).includes('class="snowflake"')).toBe(theme === 'christmas')
+    expect(svg?.props.alt).toBe(
+      '5-hour: 72% left, resets in 2h 14m 7-day: 40% left, resets in 3d 4h Cache: cold (new) Cache state is an estimate.',
+    )
+    expect(await b.find({ type: 'Text' })).toBe(undefined)
+    await b.unmount()
+    const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
+    const ps = await p.find({ type: 'Svg' })
+    expect(ps?.props.width).toBe(64 * 12)
+    expect(String(ps?.props.source)).toContain('tested on 2.1.316')
+    expect(String(ps?.props.alt)).toContain('5-hour: 72% left')
+    await p.unmount()
+  })
+
+  kitTest(`${theme}: the terminal always draws Text`, { options: { theme } }, async ($, on) => {
+    engine(on, [], {}, ['terminal'])
+    await start($, 'terminal')
+    await measure($)
+    const b = await $.ui.mount({ ...band(80), surface: 'terminal' })
+    expect(await shown(b)).toBe(WIDE)
+    expect(await b.find({ type: 'Svg' })).toBe(undefined)
+    await b.unmount()
+    const p = await $.ui.mount({ ...pane('dock'), surface: 'terminal' })
+    expect((await rowsOf(p))[0]).toBe('5-hour')
+    await p.unmount()
+  })
+}
+
+kitTest('the manifest default is christmas', async ($, on) => {
+  engine(on, [])
+  await start($)
+  const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  expect(String((await b.find({ type: 'Svg' }))?.props.source)).toContain('class="stripes"')
+  await b.unmount()
+})
+
+kitTest('text theme draws Text on the desktop', { options: { theme: 'text' } }, async ($, on) => {
+  engine(on, [])
+  await start($)
+  await measure($)
+  const b = await $.ui.mount({ ...band(80), surface: 'desktop' })
+  expect(await shown(b)).toBe(WIDE)
+  expect(await b.find({ type: 'Svg' })).toBe(undefined)
+  await b.unmount()
+})
+
+kitTest('art: too narrow for art draws text, and under 6 columns the engine band', async ($, on) => {
+  engine(on, [])
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  await start($)
+  await measure($)
+  const narrow = await $.ui.mount({ ...band(10), surface: 'desktop' })
+  expect(await narrow.find({ type: 'Svg' })).toBe(undefined)
+  expect(await shown(narrow)).toBe('72% 40% co')
+  await narrow.unmount()
+  const tiny = await $.ui.mount({ ...band(5), surface: 'desktop' })
+  expect((await tiny.find({ type: 'Text' }))?.text).toBe('engine')
+  await tiny.unmount()
+})
+
+kitTest('SVG themes never wake faster than 60 s, even with the cache under 10 minutes', async ($, on) => {
+  const { clock, ticks } = engine(on, LIMITS)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  await start($)
+  await step($)
+  await clock.advance(51 * MIN)
+  const before = ticks()
+  await clock.advance(5 * MIN)
+  expect(ticks() - before).toBeLessThanOrEqual(5)
+  expect(ticks() - before).toBeGreaterThan(0)
+})
+
+kitTest('the text theme still ticks seconds under 10 minutes', { options: { theme: 'text' } }, async ($, on) => {
+  const { clock, ticks } = engine(on, LIMITS)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  await start($)
+  await step($)
+  await clock.advance(51 * MIN)
+  const before = ticks()
+  await clock.advance(MIN)
+  expect(ticks() - before).toBeGreaterThan(30)
+})
+
+kitTest('with a terminal attached, an SVG theme keeps the text second ticks', async ($, on) => {
+  const { clock, ticks } = engine(on, LIMITS, {}, ['terminal'])
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  await start($, 'terminal')
+  await step($)
+  await clock.advance(51 * MIN)
+  const before = ticks()
+  await clock.advance(MIN)
+  expect(ticks() - before).toBeGreaterThan(30)
+})
+
+kitTest('session.attach opens the pane once when start could not, and redraws', async ($, on) => {
+  const surfaces: ('desktop' | 'terminal')[] = []
+  const { opens, ticks } = engine(on, LIMITS, {}, surfaces)
+  const attached = countAttach(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  expect(opens).toEqual([])
+  const before = ticks()
+  surfaces.push('desktop')
+  await attach($, 'desktop')
+  expect(opens).toEqual(['usage-hud'])
+  expect(ticks()).toBeGreaterThan(before)
+  await attach($, 'mobile')
+  await attach($, 'desktop', 'desktop:2')
+  expect(opens).toEqual(['usage-hud'])
+  expect(attached()).toBe(3)
+})
+
+kitTest('session.attach after the start open does not open again; terminal attach never opens', async ($, on) => {
+  const { opens } = engine(on, LIMITS)
+  const attached = countAttach(on)
+  await start($)
+  expect(opens).toEqual(['usage-hud'])
+  await attach($, 'desktop')
+  expect(opens).toEqual(['usage-hud'])
+  expect(attached()).toBe(1)
+
+})
+
+kitTest('session.attach on a terminal surface does not open', async ($, on) => {
+  const { opens } = engine(on, LIMITS, {}, [])
+  const attached = countAttach(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  await attach($, 'terminal')
+  expect(opens).toEqual([])
+  expect(attached()).toBe(1)
+})
+
+kitTest('session.attach: own work failing still reaches the engine once', async ($, on) => {
+  const { opens, fail, logs } = engine(on, LIMITS, {}, [])
+  const attached = countAttach(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  fail.open = true
+  const r = await attach($, 'desktop')
+  expect(r.clientId).toBe('desktop:default')
+  expect(attached()).toBe(1)
+  expect(opens).toEqual([])
+  expect(logs.length).toBe(1)
+  expect(/^usage-hud: session.attach pane open failed: \w+$/.test(logs[0] ?? '')).toBe(true)
+})
+
+kitTest('no surfaces and no client start: no open, no error line; /usage-hud still answers text', async ($, on) => {
+  const { opens, logs } = engine(on, [], {}, [])
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  await measure($)
+  expect(opens).toEqual([])
+  expect(logs).toEqual([])
+  const r = await $.command.run({
+    command: 'usage-hud', args: '', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 80 },
+  })
+  expect(r.text).toContain('5-hour: 72% left, resets in 2h 14m')
+  expect(r.text).toContain('Cache state is an estimate.')
+})
+
+kitTest('a phone attach (isFullscreen false or unknown) never opens the pane unasked', async ($, on) => {
+  const surfaces: ('desktop' | 'terminal')[] = []
+  const { opens } = engine(on, LIMITS, {}, surfaces)
+  countAttach(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  surfaces.push('desktop')
+  await $.session.attach({ surface: 'mobile', clientId: 'mobile:1', viewport: { columns: 40, rows: 60, isFullscreen: false } })
+  await attach($, 'mobile', 'mobile:2')
+  expect(opens).toEqual([])
+})
+
+kitTest('a desktop app start with no start surface opens once the surface is listed', async ($, on) => {
+  const { opens } = engine(on, LIMITS)
+  countAttach(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  expect(opens).toEqual(['usage-hud'])
+  await attach($, 'desktop')
+  expect(opens).toEqual(['usage-hud'])
+})
+
+// ---- REVIEW 0.3 adversarial ----
+
+for (const bad of ['neon', 'TEXT', 'Christmas', '', 42, ['text']] as unknown[]) {
+  kitTest(`R4 invalid theme ${JSON.stringify(bad)} falls back to christmas`, { options: { theme: bad as any } }, async ($, on) => {
+    engine(on, LIMITS)
+    await start($)
+    await measure($)
+    const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+    expect(String((await b.find({ type: 'Svg' }))?.props.source)).toContain('class="stripes"')
+    await b.unmount()
+  })
+}
+
+kitTest('R5 text theme on the desktop draws the pane exactly as on the terminal', { options: { theme: 'text' } }, async ($, on) => {
+  engine(on, LIMITS)
+  await start($)
+  await measure($)
+  for (const [pl, c] of [['dock', 64], ['dock', 20], ['inline', 40], ['inline', 99]] as const) {
+    const d = await $.ui.mount({ ...pane(pl, c), surface: 'desktop' })
+    const t = await $.ui.mount({ ...pane(pl, c), surface: 'terminal' })
+    expect(await rowsOf(d)).toEqual(await rowsOf(t))
+    expect(await d.find({ type: 'Svg' })).toBe(undefined)
+    await d.unmount(); await t.unmount()
+  }
+  for (const c of [6, 12, 25, 40, 80, 99, 200]) {
+    const d = await $.ui.mount({ ...band(c), surface: 'desktop' })
+    const t = await $.ui.mount({ ...band(c), surface: 'terminal' })
+    expect(await shown(d)).toBe(await shown(t))
+    await d.unmount(); await t.unmount()
+  }
+})
+
+kitTest('R6 terminal attach with isFullscreen true never opens unasked', async ($, on) => {
+  const surfaces: ('desktop' | 'terminal')[] = []
+  const { opens } = engine(on, LIMITS, {}, surfaces)
+  countAttach(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  surfaces.push('terminal')
+  await $.session.attach({ surface: 'terminal', clientId: 'terminal:default', viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  expect(opens).toEqual([])
+})
+
+kitTest('R7 a start on the mobile surface does not open unasked', async ($, on) => {
+  const { opens } = engine(on, LIMITS, {}, ['mobile' as any])
+  await $.session.start({ cwd: '/', surface: 'mobile', isInteractive: true })
+  expect(opens).toEqual([])
+})
+
+kitTest('R9 desktop attach with isFullscreen false never opens', async ($, on) => {
+  const surfaces: ('desktop' | 'terminal')[] = []
+  const { opens } = engine(on, LIMITS, {}, surfaces)
+  countAttach(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  surfaces.push('desktop')
+  await $.session.attach({ surface: 'desktop', clientId: 'd1', viewport: { columns: 64, rows: 40, isFullscreen: false } })
+  await $.session.attach({ surface: 'mobile', clientId: 'm1', viewport: { columns: 40, rows: 40, isFullscreen: false } })
+  expect(opens).toEqual([])
+})
+
+kitTest('R11 text theme cadence unchanged: seconds under 10 min of cache', { options: { theme: 'text' } }, async ($, on) => {
+  const { clock, ticks } = engine(on, LIMITS)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  await start($)
+  await step($)
+  await clock.advance(51 * MIN)
+  const before = ticks()
+  await clock.advance(MIN)
+  expect(ticks() - before).toBeGreaterThanOrEqual(55)
+})
+
+kitTest('R1 render with a throwing clock falls back to next(e) on the Svg path', async ($, on) => {
+  let boom = false
+  let logs: string[] = []
+  on('clock.now', () => {
+    if (boom) throw new TypeError('clock')
+    return { value: NOW }
+  })
+  on('clock.after', () => new Promise<any>(() => {}))
+  on('store.get', () => ({ value: undefined }))
+  on('store.set', () => ({ value: undefined }))
+  on('session.usage', () => ({ value: { startedAt: NOW, context: { window: 200000 }, rateLimits: LIMITS } }))
+  on('session.version', () => ({ value: { version: '2.1.316' } }))
+  on('session.surfaces', () => ({ value: ['desktop'] }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.measure', (_, e) => ({ changed: [...e.changed] }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.log', (_, e) => { logs.push(e.text); return { value: undefined } })
+  on('command.register', () => ({ value: { command: 'usage-hud' } }))
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  await start($)
+  await measure($)
+  const ok = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  expect(await ok.find({ type: 'Svg' })).not.toBe(undefined)
+  await ok.unmount()
+  boom = true
+  logs = []
+  const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  expect(await b.find({ type: 'Svg' })).toBe(undefined)
+  expect((await b.find({ type: 'Text' }))?.text).toBe('engine')
+  await b.unmount()
+  const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
+  expect((await p.find({ type: 'Text' }))?.text).toBe('engine')
+  await p.unmount()
+})
+
+for (const theme of ['christmas', 'classic', 'text'] as const) {
+  kitTest(`R3 ${theme}: render never writes state`, { options: { theme } }, async ($, on) => {
+    let counting = false
+    let writes = 0
+    on('state.set', (_, e, next) => {
+      if (counting) writes += 1
+      return next(e)
+    })
+    engine(on, LIMITS)
+    answerSteps(on, { read: 9000, creation: 0, input: 10 })
+    await start($)
+    await measure($)
+    await step($)
+    counting = true
+    const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+    const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
+    await p.unmount()
+    const i = await $.ui.mount({ ...pane('inline', 40), surface: 'desktop' })
+    expect(writes).toBe(0)
+    await b.unmount(); await i.unmount()
+  })
+}
+
+for (const theme of ['christmas', 'classic'] as const) {
+  kitTest(`R10 ${theme}: over 6 simulated hours timer wakes are never under 60 s apart`, { options: { theme } }, async ($, on) => {
+    const lim: SessionUsage['rateLimits'] = [
+      { kind: 'five_hour', percentUsed: 28, resetsAt: new Date(NOW + 61_000).toISOString() },
+      { kind: 'seven_day', percentUsed: 60, resetsAt: new Date(NOW + 90_500).toISOString() },
+    ]
+    const stamps: number[] = []
+    let rec = false
+    let clk: { now: () => number } | null = null
+    const { clock, ticks } = engine(on, lim)
+    answerSteps(on, { read: 9000, creation: 0, input: 10 })
+    await start($, 'desktop')
+    await measure($, lim)
+    await step($)
+    rec = true
+    let last = ticks()
+    // 6 h idle in 5 s steps, no events: record when a wake bumped the tick.
+    let t = 0
+    for (let i = 0; i < (6 * 60 * 60) / 5; i++) {
+      await clock.advance(5000)
+      t += 5000
+      if (ticks() !== last) { stamps.push(t); last = ticks() }
+    }
+    let minGap = Infinity
+    for (let i = 1; i < stamps.length; i++) minGap = Math.min(minGap, stamps[i]! - stamps[i - 1]!)
+    expect(stamps.length).toBeGreaterThan(300)
+    expect(minGap).toBeGreaterThanOrEqual(60_000)
+    void rec; void clk
+  })
+}
+
+kitTest('R12 privacy: art themes log nothing and store only limits', async ($, on) => {
+  const { mem, logs, clock } = engine(on, LIMITS)
+  countAttach(on)
+  answerSteps(on, { read: 9000, creation: 0, input: 10, model: 'claude-<x>&"secret' })
+  await start($)
+  await measure($)
+  await step($)
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:cj-laptop' })
+  const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const src = String((await b.find({ type: 'Svg' }))?.props.source) + String((await b.find({ type: 'Svg' }))?.props.alt)
+  expect(src.includes('secret')).toBe(false)
+  expect(src.includes('cj-laptop')).toBe(false)
+  await clock.advance(10 * MIN)
+  expect(logs).toEqual([])
+  expect(Object.keys(mem).sort()).toEqual(['limits'])
+  await b.unmount()
 })

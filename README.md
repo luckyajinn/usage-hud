@@ -14,6 +14,18 @@ It draws a one-line strip above the message box and a docked pane beside the con
 
 Bars are green above 50% left, amber from 20% to 50%, red under 20%. Readings older than 10 minutes are dimmed with "as of".
 
+## Look
+
+Option `theme`:
+
+- `christmas` (default): in the desktop app, mobile and VS Code the strip and pane are drawn as a card: a deep green panel with a thin gold border, candy-cane stripes on bars with more than 50% left, gold from 20% to 50%, deep red under 20%, a snowflake by the cache (bright while hot, grey when cold), small ornaments by the limits, holly in the pane and a few snow dots.
+- `classic`: the same card in neutral colours with solid green, amber and red bars.
+- `text`: the text look shown above, everywhere.
+
+The terminal always draws the text look. The card is drawn in dark colours (the app does not tell a mod whether it is in light or dark mode). It shows whole minutes and redraws at most once a minute; only the text look counts down seconds in the last 10 minutes of the cache.
+
+Set it with `/plugin configure usage-hud@cj-mods` in a terminal session.
+
 ## Install
 
 Needs Claude Code with mod support (tested on 2.1.309 and 2.1.316) and a Claude subscription (rate limits are not reported on API keys).
@@ -35,7 +47,18 @@ Then start a new session. In the desktop app, use a local Code session.
 |---|---|
 | Terminal (`claude`) | Strip above the prompt; pane in fullscreen at 110+ columns |
 | Desktop app, local Code session | Strip above the message box; pane docked on the right |
-| Cloud session (claude.ai/code or viewed in the desktop app) | Installs and runs, but nothing is drawn: the app does not attach a surface to cloud sessions for mods today |
+| Cloud session (claude.ai/code or viewed in the desktop app) | Installs and runs; the strip and pane are not drawn today (see below). `/usage-hud` may answer as text |
+
+## Cloud sessions
+
+A cloud session starts from a fresh machine, so install the mod in the environment's setup script:
+
+```
+claude plugin marketplace add luckyajinn/usage-hud
+claude plugin install usage-hud@cj-mods --scope user
+```
+
+Honest status: the app does not attach a drawing surface to cloud sessions for mods today, so the strip and the pane do not draw there. `/usage-hud` answers its text readout without any surface, so it may be the one readout that reaches a cloud session. If a client attaches later (the app connects, or a phone opens the session), the mod opens its pane once and draws the strip then.
 
 ## Cache estimate
 

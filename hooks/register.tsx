@@ -7,6 +7,8 @@ import type { CacheStamp, LimitsSnap, Ttl, TtlSetting } from '../types'
 import { computeView, mergeSnap, nextWake, pickLimit, resolveTtl, stampFromResume, stampFromStep, ttlFromResume } from './data'
 import type { View } from './data'
 import { bandSegments, commandText, paneLines } from './format'
+import { altText, bandSvg, paneSvg } from './art'
+import type { Art, ArtTheme } from './art'
 import type { Seg } from './format'
 
 const PANE = 'usage-hud'
@@ -37,6 +39,14 @@ function log($: $T, where: string, err?: unknown): void {
 
 const isSetting = (v: unknown): v is TtlSetting => v === 'auto' || v === '5m' || v === '1h'
 const isTtl = (v: unknown): v is Ttl => v === '5m' || v === '1h'
+type Theme = ArtTheme | 'text'
+const isTheme = (v: unknown): v is Theme => v === 'christmas' || v === 'classic' || v === 'text'
+/** Surfaces that draw a pane beside the transcript when a client asks. */
+/**
+ * Dark or light art. Neither the render input nor its viewport carries a colour
+ * scheme, and the CLI theme setting is the terminal's, not the app's: assume dark.
+ */
+const DARK = true
 
 /** A stored snapshot read back, kept to the three fields per window; null when malformed. */
 function toSnap(v: unknown): LimitsSnap | null {
@@ -52,6 +62,7 @@ function toSnap(v: unknown): LimitsSnap | null {
 
 // Process-local facts (not in PluginState): a reload starts them over.
 let setting: TtlSetting = 'auto'
+let theme: Theme = 'christmas'
 let turnDone = false
 let engineVersion: string | null = null
 let timer: Timer | null = null
@@ -78,7 +89,16 @@ async function bump($: $T): Promise<void> {
 async function schedule($: $T): Promise<void> {
   const now = await $.clock.now()
   const { view, limits } = await viewAt($, now)
-  const wait = Math.max(1000, nextWake(view, now, limits) - now)
+  // An SVG theme redraws at most once a minute, unless a terminal (text, second ticks) is attached.
+  let floor = 1000
+  if (theme !== 'text') {
+    try {
+      if (!(await $.session.surfaces()).includes('terminal')) floor = 60_000
+    } catch {
+      // unknown surfaces: keep text ticks
+    }
+  }
+  const wait = Math.max(floor, nextWake(view, now, limits, floor) - now)
   timer?.cancel()
   timer = $.clock.after(wait, () => {
     void wake($)
@@ -115,6 +135,7 @@ async function learnTtl($: $T, t: Ttl | null): Promise<void> {
 
 export const register: Register = (on, options) => {
   setting = isSetting(options.cacheTtl) ? options.cacheTtl : 'auto'
+  theme = isTheme(options.theme) ? options.theme : 'christmas'
   turnDone = false
   timer?.cancel()
   timer = null
@@ -147,14 +168,14 @@ export const register: Register = (on, options) => {
       log($, 'session.start command register', err)
     }
     try {
-      // Unasked open once per session, only where a pane docks: the desktop, or a host with no surface yet.
-      if (!(await read($, openedA))) {
-        const surfaces = [...(await $.session.surfaces())]
-        if (e.surface !== 'terminal' && (surfaces.length === 0 || surfaces.includes('desktop'))) {
-          await update($, openedA, () => true)
-          const o = await $.ui.open({ id: PANE, title: TITLE })
-          if (!o.isPlaced) log($, 'session.start pane not placed')
-        }
+      // Unasked open once per session, never on a terminal start. A desktop app session can
+      // start before its surface is listed (the probe on CJ's PC was placed this way), so try;
+      // the flag is set only once the pane is placed, and session.attach tries again otherwise.
+      // In a cloud session with no surface this logs one engine no-surface line, nothing more.
+      if (!(await read($, openedA)) && (e.surface === null || e.surface === 'desktop' || e.surface === 'vscode')) {
+        const o = await $.ui.open({ id: PANE, title: TITLE })
+        // Not placed is normal before a surface attaches; session.attach tries again.
+        if (o.isPlaced) await update($, openedA, () => true)
       }
     } catch (err) {
       log($, 'session.start pane open', err)
@@ -220,6 +241,30 @@ export const register: Register = (on, options) => {
     }
     return r
   }).catch(($, e, next) => next(e))
+
+  // A client joined (the desktop connected, a phone opened the session): the unasked
+  // open if it never ran, then a redraw so the band draws there.
+  on('session.attach', async ($, e, next) => {
+    const r = await next(e)
+    try {
+      // Only where the surface docks panes: a phone reports isFullscreen false and a pane
+      // opened unasked there would take over the screen.
+      const docks = e.surface === 'terminal' ? false : e.surface === 'desktop' ? e.viewport?.isFullscreen !== false : e.viewport?.isFullscreen === true
+      if (docks && !(await read($, openedA))) {
+        const o = await $.ui.open({ id: PANE, title: TITLE })
+        if (o.isPlaced) await update($, openedA, () => true)
+        else log($, 'session.attach pane not placed')
+      }
+    } catch (err) {
+      log($, 'session.attach pane open', err)
+    }
+    try {
+      await changed($)
+    } catch (err) {
+      log($, 'session.attach schedule', err)
+    }
+    return r
+  })
 
   on('session.end', async ($, e, next) => {
     const r = await next(e)
@@ -307,7 +352,12 @@ export const register: Register = (on, options) => {
 
   // ---- render: no writes, next(e) on any error ----
 
-  type Els = { Box: any; Text: any }
+  type Els = { Box: any; Text: any; Svg?: any }
+  // The Svg element where the surface has one and the theme wants art; else null (text).
+  const svgOf = (surface: string, els: Els): any =>
+    theme !== 'text' && surface !== 'terminal' && 'Svg' in els && els.Svg ? els.Svg : null
+  const art = (Svg: any, a: Art, view: View) =>
+    <Svg source={a.source} alt={altText(view)} width={a.width} height={a.height} />
   // Bar cells: the tone is the background. Track is the empty part.
   const BAR_BG = {
     normal: 'success', success: 'success', warning: 'warning', error: 'error', dim: 'inactive', track: 'subtle',
@@ -330,18 +380,25 @@ export const register: Register = (on, options) => {
     </Box>
   )
 
+  // Narrower than this the art cannot say anything legible: the text forms draw.
+  const BAND_SVG_MIN = 12
   const isSep = (s: Seg) => s.tone === 'dim' && s.text.trim() === '|'
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    let tree: ReturnType<typeof row> | null = null
+    let tree: ReturnType<typeof row> | ReturnType<typeof art> | null = null
     try {
       await read($, tickA)
       const { view } = await viewAt($, await $.clock.now())
       const els = $.ui.resolve(e) as unknown as Els
-      const segs = bandSegments(view, e.props.bodyColumns)
-      // Too narrow to draw anything: the engine's own band.
-      tree = segs.length > 0 ? row(els, segs) : null
+      const Svg = svgOf(e.surface, els)
+      if (Svg !== null && e.props.bodyColumns >= BAND_SVG_MIN) {
+        tree = art(Svg, bandSvg(view, e.props.bodyColumns, theme as ArtTheme, DARK), view)
+      } else {
+        const segs = bandSegments(view, e.props.bodyColumns)
+        // Too narrow to draw anything: the engine's own band.
+        tree = segs.length > 0 ? row(els, segs) : null
+      }
     } catch (err) {
       log($, 'band render', err)
     }
@@ -349,14 +406,19 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    let tree: ReturnType<typeof row> | null = null
+    let tree: ReturnType<typeof row> | ReturnType<typeof art> | null = null
     try {
       await read($, tickA)
       const { view } = await viewAt($, await $.clock.now())
       const els = $.ui.resolve(e) as unknown as Els
       const cols = e.props.bodyColumns
-      let lines: Seg[][]
-      if (e.props.placement === 'inline') {
+      const Svg = svgOf(e.surface, els)
+      const version = { tested: TESTED, actual: engineVersion !== null && KNOWN_GOOD.includes(engineVersion) ? TESTED : engineVersion }
+      let lines: Seg[][] = []
+      if (Svg !== null && cols >= BAND_SVG_MIN) {
+        const a = e.props.placement === 'inline' ? bandSvg(view, cols, theme as ArtTheme, DARK) : paneSvg(view, cols, theme as ArtTheme, DARK, version)
+        tree = art(Svg, a, view)
+      } else if (e.props.placement === 'inline') {
         // One row when the wide tiers fit, else limits row then cache row.
         const segs = bandSegments(view, cols)
         let cut = -1
@@ -365,11 +427,11 @@ export const register: Register = (on, options) => {
         })
         lines = cols >= 56 || cut < 0 ? [segs] : [segs.slice(0, cut), segs.slice(cut + 1)]
       } else {
-        lines = paneLines(view, cols, { tested: TESTED, actual: engineVersion !== null && KNOWN_GOOD.includes(engineVersion) ? TESTED : engineVersion })
+        lines = paneLines(view, cols, version)
       }
       const { Box } = els
       // Nothing that fits: the engine's own pane.
-      tree = lines.some(l => l.length > 0) ? <Box flexDirection="column">{lines.map(l => row(els, l))}</Box> : null
+      if (tree === null) tree = lines.some(l => l.length > 0) ? <Box flexDirection="column">{lines.map(l => row(els, l))}</Box> : null
     } catch (err) {
       log($, 'pane render', err)
     }
