@@ -94,8 +94,7 @@ const wordZ = (z: number): number => Math.round(z * 0.6)
 
 /**
  * One band column: small-caps label, serif numeral, italic tail at the right, ruled scale below.
- * The label outranks the hero's size and the little "hot" word; a stale reading keeps its
- * "as of" note when there is any way to fit it.
+ * The label outranks the hero's size and the little "hot" word.
  */
 function bandBlock(x: number, w: number, r: Readout, p: Palette, compact: boolean, isCache: boolean): string {
   const size = compact ? 17 : 20
@@ -131,7 +130,7 @@ function bandBlock(x: number, w: number, r: Readout, p: Palette, compact: boolea
   s += text(at, BASE, spans, { size: hero.z, weight: 600 })
   const end = at + (hero.cut ? sw(hero.cut, hero.z, true) : heroW(hero.z, hero.word))
 
-  // Italic tail, longest first; a stale reading prefers its "as of" note over the reset time.
+  // Italic tail, longest first.
   const room = x + w - end - 10
   const full = [r.detail, r.extra].filter(t => t).join(', ')
   const short = [r.detail.replace(/resets in /, ''), r.detail.replace(/^.*resets in /, '')]

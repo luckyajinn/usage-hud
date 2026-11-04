@@ -114,8 +114,7 @@ export function windowReadout(w: WindowView, p: Palette): Readout {
   const base = { label, short: w.label, unit: '', extra: '', frac: 0, fill: 'none' as Fill, dim: false }
   if (w.state === 'none') return { ...base, value: '--', valueFill: p.muted, detail: 'no reading yet' }
   if (w.state === 'na') return { ...base, value: 'n/a', valueFill: p.muted, detail: 'no subscription limits' }
-  const age = w.state === 'ok' ? '' : 'as of ' + formatDuration(w.ageMs)
-  if (w.state === 'rolled') return { ...base, value: 'reset', valueFill: p.muted, detail: 'window has reset', extra: age, dim: true }
+  if (w.state === 'rolled') return { ...base, value: 'reset', valueFill: p.muted, detail: 'window has reset', dim: true }
   const fill = limitFill(w)
   const valueFill = w.state !== 'ok' ? p.muted : fill === 'low' ? p.lowText : fill === 'mid' ? p.midText : p.text
   let detail = ''
@@ -123,7 +122,7 @@ export function windowReadout(w: WindowView, p: Palette): Readout {
   else if (w.resetsInMs !== null) detail = 'resets in ' + formatDuration(w.resetsInMs)
   if (w.exceeded) detail = detail ? 'limit reached, ' + detail : 'limit reached'
   return {
-    ...base, value: `${w.percentLeft}%`, unit: 'left', valueFill, detail, extra: age,
+    ...base, value: `${w.percentLeft}%`, unit: 'left', valueFill, detail,
     frac: w.percentLeft / 100, fill, dim: w.state !== 'ok',
   }
 }

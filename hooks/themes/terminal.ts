@@ -121,7 +121,7 @@ const BAR_H = 8
 
 /**
  * One band block: prompt label ("5h>"), the value, the muted tail right-aligned, then the
- * block bar. The label beats the value's size; a stale reading keeps its "as of" note if it can.
+ * block bar. The label beats the value's size.
  */
 function bandBlock(x: number, w: number, r: Readout, p: Palette, compact: boolean, isCache: boolean): string {
   const lz = compact ? 11 : 12

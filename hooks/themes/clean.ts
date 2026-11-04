@@ -48,7 +48,7 @@ const DOT_MIN_W = 100
 /**
  * One band block: dot, caps label, big value, then the muted tail at the right.
  * The label has priority over the dot and over the hero's size: a bare "98% 100% 52m" says
- * nothing. A stale reading also keeps its "as of" note when there is any way to fit it.
+ * nothing.
  */
 function bandBlock(x: number, w: number, r: Readout, p: Palette, compact: boolean, isCache: boolean): string {
   const size = compact ? 16 : 19
@@ -89,7 +89,7 @@ function bandBlock(x: number, w: number, r: Readout, p: Palette, compact: boolea
   s += text(at, BASE, [{ text: hero.text, fill: r.valueFill }], { size: hero.size, weight: 650 })
   const room = x + w - (at + valW) - 10
   const full = [r.detail, r.extra].filter(t => t).join(', ')
-  // Longest first. A stale reading prefers its "as of" note over the reset time; a reached
+  // Longest first. Stale readings no longer carry an "as of" note (they are dimmed instead); a reached
   // limit keeps "limit reached" and then just the time.
   const short = [r.detail.replace(/resets in /, ''), r.detail.replace(/^.*resets in /, '')]
   const tails = isCache

@@ -270,21 +270,19 @@ test('window state na collapses into one segment', () => {
   expect(show(bandSegments(one, 99))).toBe('5h #######--- 72% 2h 14m  |  7d n/a  |  Cache #######--- hot 41m')
 })
 
-test('stale values are dim and add the age where room allows', () => {
+test('stale values are dim and say only the reset time', () => {
   const stale = (label: '5h' | '7d', p: number, r: number) => win(label, p, r, { state: 'stale', ageMs: 12 * M })
   const v = base({ fiveHour: stale('5h', 72, 2 * H + 14 * M), sevenDay: stale('7d', 10, 3 * D + 4 * H) })
-  const wide = '5h #######--- 72% 2h 14m, as of 12m  |  7d #--------- 10% 3d 4h, as of 12m  |  Cache #######--- hot 41m'
+  const wide = '5h #######--- 72% 2h 14m  |  7d #--------- 10% 3d 4h  |  Cache #######--- hot 41m'
   expect(show(bandSegments(v, 200))).toBe(wide)
   expect(toneOf(bandSegments(v, 200), '10%')).toBe('dim')
   expect(toneOf(bandSegments(v, 200), '72%')).toBe('dim')
   // Stale bars fill dim.
   expect(fills(bandSegments(v, 200)).map(s => s.tone)).toEqual(['dim', 'dim', 'success'])
-  expect(wide.length).toBe(103)
-  expect(show(bandSegments(v, 103))).toBe(wide)
-  // One column short: the bar tier without the age, still dim.
-  expect(show(bandSegments(v, 102))).toBe(B10.replace('####------ 40%', '#--------- 10%'))
+  // The stale note is gone: the strip is exactly as wide as a fresh one.
   expect(show(bandSegments(v, 99))).toBe(B10.replace('####------ 40%', '#--------- 10%'))
-  // Text tiers below the bar tiers carry no age.
+  expect(show(bandSegments(v, 99))).toBe(wide)
+  // Text tiers below the bar tiers are the same.
   expect(show(bandSegments(v, 60))).toBe(T2.replace('40%', '10%'))
 })
 
