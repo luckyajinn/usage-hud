@@ -6,11 +6,11 @@
 // warning, deep rose-red low, dusty mauve stale, and twilight lavender for the hot cache.
 import type { View } from '../data'
 import {
-  BAND_H, bandTail, cacheReadout, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout, wrapText,
+  BAND_H, bandTail, cacheReadout, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout,
 } from '../artkit'
-import type { Art, Fill, Palette, Readout, Span, Version } from '../artkit'
+import type { Art, Fill, Palette, Readout } from '../artkit'
 
-/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + ('b' | 'p'). */
+/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + 'b'. */
 export const ID_TAG = 's'
 
 // ---- colours ----
@@ -203,115 +203,5 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
     const reads = [windowReadout(v.fiveHour, p), windowReadout(v.sevenDay, p), cache]
     reads.forEach((r, i) => { body += bandBlock(pad + i * (bw + gap), bw, r, p, id, compact, i === 2) })
   }
-  return { source: card(W, H, id, dark, p, body), width: W, height: H }
-}
-
-// ---- pane ----
-
-/** A little setting sun over a horizon line, for the pane header. */
-function horizon(x: number, y: number, s: number, p: Palette, id: string): string {
-  const r = s / 2
-  const cx = x + r + 1
-  let rays = ''
-  for (const a of [-150, -115, -90, -65, -30]) {
-    const t = (a * Math.PI) / 180
-    rays += `<line x1="${r1(cx + Math.cos(t) * (r + 2.5))}" y1="${r1(y + Math.sin(t) * (r + 2.5))}" x2="${r1(cx + Math.cos(t) * (r + 5))}" y2="${r1(y + Math.sin(t) * (r + 5))}" stroke="${p.mid}" stroke-width="1.6" stroke-linecap="round"/>`
-  }
-  return rays +
-    `<path d="M${r1(cx - r)} ${r1(y)}A${r} ${r} 0 0 1 ${r1(cx + r)} ${r1(y)}Z" fill="url(#${id}Fmid)"/>` +
-    `<rect x="${r1(x - 1)}" y="${r1(y + 1)}" width="${r1(s + 4)}" height="1.8" rx=".9" fill="${p.low}" opacity=".75"/>`
-}
-
-/** The docked pane: header with a little sunset, three stacked blocks, footer. `W` is the finished pixel width. */
-export function pane(v: View, W: number, dark: boolean, version: Version, idTag: string = ID_TAG): Art {
-  const p = palette(dark)
-  const id = 'uh' + idTag + (dark ? 'd' : 'l') + 'p'
-  const narrow = W < 360
-  const pad = narrow ? 15 : 22
-  const big = narrow ? 27 : 36
-  const barH = narrow ? 9 : 11
-  const inner = W - pad * 2
-  const dsize = narrow ? 11.5 : 12.5
-  const lh = narrow ? 14 : 16
-  const divider = (y: number) => `<rect x="${pad}" y="${r1(y)}" width="${inner}" height="1.5" rx=".75" fill="${p.divider}"/>`
-  let body = ''
-
-  // Header: a small setting sun, then the title.
-  const headH = narrow ? 40 : 50
-  const icon = narrow ? 14 : 18
-  const iconW = icon + 12
-  const hz = narrow ? 13.5 : 16
-  const showIcon = inner - iconW >= textW('Usage left', 11, true)
-  const head = fitText('Usage left', hz, 10, inner - (showIcon ? iconW : 0), true)
-  const hy = headH * 0.62
-  if (showIcon) body += horizon(pad, hy, icon, p, id)
-  body += text(pad + (showIcon ? iconW : 0), hy, [{ text: head.text, fill: p.text }], { size: head.size, weight: 800 })
-  body += divider(headH)
-  let y = headH + (narrow ? 17 : 24)
-
-  const block = (r: Readout, labels: string[]): void => {
-    let s = sun(pad + 5, y + 5, r, p)
-    const lx = pad + DOT_W + 2
-    const label = labels.find(l => textW(l, 12, true) <= inner - (lx - pad)) ?? labels[labels.length - 1]!
-    const lab = fitText(label, 12, 8, inner - (lx - pad), true)
-    s += text(lx, y + 9.5, [{ text: lab.text, fill: p.muted }], { size: lab.size, weight: 700 })
-
-    // Hero: "hot" is a small word before the number; the unit trails it. Shrink, then drop the unit.
-    const word = r.value.startsWith('hot ') ? 'hot' : ''
-    const num = word ? r.value.slice(4) : r.value
-    const widthAt = (z: number, unit: boolean) =>
-      (word ? textW(word, Math.round(z * 0.45), true) + 6 : 0) + heroW(num, z) +
-      (unit && r.unit ? textW(r.unit, Math.round(z * 0.45), true) + 6 : 0)
-    let z = big
-    let unit = true
-    while (z > 14 && widthAt(z, unit) > inner) z--
-    if (widthAt(z, unit) > inner) { unit = false; z = big; while (z > 12 && widthAt(z, unit) > inner) z-- }
-    const small = Math.round(z * 0.45)
-    const numRoom = inner - (word ? textW(word, small, true) + 6 : 0)
-    const spans: Span[] = []
-    if (word) spans.push({ text: word, fill: p.muted, size: small, weight: 700 })
-    spans.push({ text: widthAt(z, unit) > inner ? fitText(num, z, 8, numRoom / HEAVY, true).text : num, fill: r.valueFill, dx: word ? 6 : 0 })
-    if (unit && r.unit) spans.push({ text: r.unit, fill: p.muted, size: small, weight: 700, dx: 6 })
-    const by = y + 21 + z * 0.72
-    s += text(pad, by, spans, { size: z, weight: NUM_WEIGHT })
-
-    const barY = by + (narrow ? 9 : 12)
-    s += bar(pad, barY, inner, barH, r.frac, r.fill, id, p)
-    const lines = wrapText([r.detail, r.extra].filter(t => t).join(', '), dsize, inner, 3)
-    let ly = barY + barH + (narrow ? 15 : 18)
-    lines.forEach((l, i) => { s += text(pad, ly + i * lh, [{ text: l, fill: p.muted }], { size: dsize }) })
-    ly += Math.max(0, lines.length - 1) * lh
-    body += r.dim ? `<g opacity=".78">${s}</g>` : s
-    y = ly + (narrow ? 22 : 30)
-  }
-
-  if (limitsNa(v)) {
-    block({ ...windowReadout(v.fiveHour, p), label: 'Limits' }, ['Limits'])
-  } else {
-    const w5 = windowReadout(v.fiveHour, p)
-    const w7 = windowReadout(v.sevenDay, p)
-    block(w5, [w5.label + ' window', w5.label, w5.short])
-    block(w7, [w7.label + ' window', w7.label, w7.short])
-  }
-  block(cacheReadout(v, p), ['Prompt cache', 'Cache'])
-
-  // Footer: the engine the mod was tested on, and a flag for any other.
-  body += divider(y - 12)
-  y += 6
-  const footText = 'tested on ' + version.tested
-  const foot = fitText(footText, 11.5, 9, inner)
-  const untested = version.actual !== null && version.actual !== version.tested
-  const note = `untested engine ${version.actual ?? ''}`
-  const oneLine = foot.text === footText && textW(footText + '  ' + note, 11.5) <= inner - 6
-  const spans: Span[] = [{ text: foot.text, fill: p.faint }]
-  if (untested && oneLine) spans.push({ text: note, fill: p.midText, dx: 8 })
-  body += text(pad, y, spans, { size: foot.size })
-  if (untested && !oneLine) {
-    for (const l of wrapText(note, 11.5, inner, 2)) {
-      y += 16
-      body += text(pad, y, [{ text: l, fill: p.midText }], { size: 11.5 })
-    }
-  }
-  const H = Math.ceil(y + (narrow ? 14 : 18))
   return { source: card(W, H, id, dark, p, body), width: W, height: H }
 }

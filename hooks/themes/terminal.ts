@@ -8,9 +8,9 @@
 // every glyph of a monospace font is the same ~0.6em wide.
 import type { View } from '../data'
 import { BAND_H, bandTail, cacheReadout, esc, fillPaint, limitsNa, r1, text, windowReadout } from '../artkit'
-import type { Art, Fill, Palette, Readout, Span, Version } from '../artkit'
+import type { Art, Fill, Palette, Readout } from '../artkit'
 
-/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + ('b' | 'p'). Pinned: do not change. */
+/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + 'b'. Pinned: do not change. */
 export const ID_TAG = 't'
 
 const FONT_MONO = "ui-monospace, 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace"
@@ -54,18 +54,6 @@ function monoFit(s: string, size: number, min: number, w: number): { text: strin
   const cs = [...s]
   while (cs.length > 1 && mw(cs.join('') + '…', z) > w) cs.pop()
   return { text: cs.join('') + '…', size: z }
-}
-
-/** Greedy word wrap with monospace widths; "2h 14m" stays together; a line that still overflows is cut. */
-function monoWrap(s: string, size: number, w: number, maxLines: number): string[] {
-  const lines: string[] = []
-  const words = s.replace(/(\d+[dhm]) (?=\d+[dhm])/g, '$1\u0001').split(' ').filter(t => t).map(t => t.replace(/\u0001/g, ' '))
-  for (const word of words) {
-    const last = lines[lines.length - 1]
-    if (last !== undefined && (mw(last + ' ' + word, size) <= w || lines.length >= maxLines)) lines[lines.length - 1] = last + ' ' + word
-    else lines.push(word)
-  }
-  return lines.map(l => monoFit(l, size, size, w).text)
 }
 
 // ---- drawing pieces ----
@@ -215,124 +203,5 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
     const reads = [windowReadout(v.fiveHour, p), windowReadout(v.sevenDay, p), cache]
     reads.forEach((r, i) => { body += bandBlock(pad + i * (bw + gap), bw, r, p, compact, i === 2) })
   }
-  return { source: crt(W, H, p, dark, id, body), width: W, height: H }
-}
-
-// ---- pane ----
-
-/** The docked pane: "$ usage" prompt header, three stacked blocks with block bars, footer. `W` is the finished pixel width. */
-export function pane(v: View, W: number, dark: boolean, version: Version, idTag: string = ID_TAG): Art {
-  const p = palette(dark)
-  const id = 'uh' + idTag + (dark ? 'd' : 'l') + 'p'
-  const narrow = W < 300
-  const pad = narrow ? 10 : 16
-  const big = narrow ? 26 : 34
-  const barH = narrow ? 8 : 10
-  const inner = W - pad * 2
-  const dz = narrow ? 10.5 : 11.5
-  const lh = narrow ? 14 : 16
-  const dashed = (y: number) => `<line x1="${pad}" y1="${r1(y)}" x2="${W - pad}" y2="${r1(y)}" stroke="${p.border}" stroke-width="1" stroke-dasharray="4 3"/>`
-  let body = ''
-
-  // Header: "$ usage --left" and a solid block cursor (static: no animation).
-  const headH = narrow ? 30 : 38
-  const hz0 = narrow ? 13 : 15
-  const curW = (z: number) => z * 0.62 + 3
-  const heads = ['$ usage --left', '$ usage', 'usage']
-  let head = heads[heads.length - 1]!
-  let hz = hz0
-  for (const h of heads) {
-    const z = monoSize(h, hz0, 10, inner - curW(10))
-    if (z) { head = h; hz = z; break }
-  }
-  const hy = headH * 0.66
-  const hs: Span[] = head.startsWith('$ ')
-    ? [{ text: '$', fill: p.muted }, { text: head.slice(2, 7), fill: p.text, dx: hz * 0.62 }, ...(head.length > 7 ? [{ text: head.slice(7), fill: p.muted }] : [])]
-    : [{ text: head, fill: p.text }]
-  body += text(pad, hy, hs, { size: hz, weight: 700 })
-  const cx = pad + mw(head, hz) + 3
-  body += `<rect x="${r1(cx)}" y="${r1(hy - hz * 0.78)}" width="${r1(hz * 0.6)}" height="${r1(hz * 0.95)}" fill="${p.good}"/>`
-  body += dashed(headH)
-  let y = headH + (narrow ? 14 : 20)
-
-  const block = (r: Readout, labels: string[]): void => {
-    const lab0 = labels.find(l => mw(l, 11) <= inner) ?? labels[labels.length - 1]!
-    const lab = monoFit(lab0, 11, 8, inner)
-    let s = text(pad, y + 9, [{ text: lab.text, fill: p.muted }], { size: lab.size, weight: 600 })
-
-    // Hero: "hot" is a small word before the number; the unit trails it. Shrink, then drop the unit.
-    const word = r.value.startsWith('hot ') ? 'hot' : ''
-    const num = word ? r.value.slice(4) : r.value
-    const smallOf = (z: number) => Math.max(9, Math.round(z * 0.4))
-    const widthAt = (z: number, unit: boolean) =>
-      (word ? mw(word, smallOf(z)) + 6 : 0) + mw(num, z) + (unit && r.unit ? mw(r.unit, smallOf(z)) + 6 : 0)
-    let z = big
-    let unit = true
-    while (z > 14 && widthAt(z, unit) > inner) z--
-    if (widthAt(z, unit) > inner) { unit = false; z = big; while (z > 12 && widthAt(z, unit) > inner) z-- }
-    const small = smallOf(z)
-    const numRoom = inner - (word ? mw(word, small) + 6 : 0)
-    const spans: Span[] = []
-    if (word) spans.push({ text: word, fill: p.muted, size: small, weight: 600 })
-    spans.push({ text: widthAt(z, unit) > inner ? monoFit(num, z, 8, numRoom).text : num, fill: r.valueFill, dx: word ? 6 : 0 })
-    if (unit && r.unit) spans.push({ text: r.unit, fill: p.muted, size: small, weight: 600, dx: 6 })
-    const by = y + 18 + z * 0.74
-    s += text(pad, by, spans, { size: z, weight: 700 })
-
-    const barY = by + (narrow ? 9 : 12)
-    s += blocks(pad, barY, inner, barH, r.frac, r.fill, p, narrow ? 16 : 28, 7)
-
-    // Details as shell comments: "# resets in 2h 14m". A reached limit gets its own red line.
-    let ly = barY + barH + (narrow ? 16 : 20)
-    const hash = mw('# ', dz)
-    let rest = [r.detail, r.extra].filter(t => t).join(', ')
-    if (r.detail.startsWith('limit reached')) {
-      const bang = monoFit('! limit reached', dz, 8, inner)
-      s += text(pad, ly, [{ text: bang.text, fill: p.lowText }], { size: bang.size, weight: 700 })
-      ly += lh
-      rest = [r.detail.replace(/^limit reached,? ?/, ''), r.extra].filter(t => t).join(', ')
-    }
-    const lines = rest ? monoWrap(rest, dz, inner - hash, 3) : []
-    lines.forEach((l, i) => {
-      s += text(pad, ly + i * lh, [{ text: '#', fill: p.faint }, { text: l, fill: p.muted, dx: hash - mw('#', dz) }], { size: dz })
-    })
-    ly += Math.max(0, lines.length - 1) * lh
-    body += dimmed(r, s)
-    y = ly + (narrow ? 20 : 26)
-  }
-
-  if (limitsNa(v)) {
-    block({ ...windowReadout(v.fiveHour, p), label: 'Limits' }, ['limits>'])
-  } else {
-    const w5 = windowReadout(v.fiveHour, p)
-    const w7 = windowReadout(v.sevenDay, p)
-    block(w5, [w5.label + '>', w5.short + '>'])
-    block(w7, [w7.label + '>', w7.short + '>'])
-  }
-  block(cacheReadout(v, p), ['prompt-cache>', 'cache>'])
-
-  // Footer: the engine the mod was tested on, and a flag for any other.
-  body += dashed(y - 12)
-  y += 6
-  const fz = narrow ? 10 : 11
-  const footText = 'tested on ' + version.tested
-  // The "-- " comment dash goes first when the line is tight.
-  const dash = mw('-- ' + footText, fz) <= inner
-  const foot = monoFit(footText, fz, 8, inner - (dash ? mw('-- ', fz) : 0))
-  const untested = version.actual !== null && version.actual !== version.tested
-  const note = `untested engine ${version.actual ?? ''}`
-  const oneLine = dash && foot.text === footText && mw('-- ' + footText + '  ' + note, fz) <= inner
-  const spans: Span[] = dash
-    ? [{ text: '--', fill: p.faint }, { text: foot.text, fill: p.faint, dx: mw(' ', fz) }]
-    : [{ text: foot.text, fill: p.faint }]
-  if (untested && oneLine) spans.push({ text: note, fill: p.midText, dx: mw('  ', fz) })
-  body += text(pad, y, spans, { size: foot.size })
-  if (untested && !oneLine) {
-    for (const l of monoWrap(note, fz, inner, 2)) {
-      y += lh
-      body += text(pad, y, [{ text: l, fill: p.midText }], { size: fz })
-    }
-  }
-  const H = Math.ceil(y + (narrow ? 12 : 16))
   return { source: crt(W, H, p, dark, id, body), width: W, height: H }
 }

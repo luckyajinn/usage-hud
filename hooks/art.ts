@@ -2,15 +2,15 @@
 // the surface's Svg element; the terminal draws text.
 //
 // Layout: ./artkit holds the theme-agnostic pieces (text measuring, readouts, constants);
-// each look is one module (./themes/<name>) exporting ID_TAG, palette, band and pane; this
+// each look is one module (./themes/<name>) exporting ID_TAG, palette and band; this
 // file keeps the classic look, computes the pixel width and dispatches by theme name.
 import type { View } from './data'
 import { commandText } from './format'
 import {
-  BAND_CELL_PX, BAND_H, PANE_CELL_PX, bandTail, cacheReadout, frame, limitsNa, pill, r1, text, textW,
+  BAND_CELL_PX, BAND_H, bandTail, cacheReadout, frame, limitsNa, pill, r1, text, textW,
   windowReadout,
 } from './artkit'
-import type { Art, Palette, Readout, Span, Version } from './artkit'
+import type { Art, Palette, Readout, Span } from './artkit'
 import * as clean from './themes/clean'
 import * as midnight from './themes/midnight'
 import * as paper from './themes/paper'
@@ -18,8 +18,8 @@ import * as terminal from './themes/terminal'
 import * as sunset from './themes/sunset'
 import * as mono from './themes/mono'
 
-export { BAND_CELL_PX, BAND_H, PANE_CELL_PX, esc, textW } from './artkit'
-export type { Art, Palette, Version } from './artkit'
+export { BAND_CELL_PX, BAND_H, esc, textW } from './artkit'
+export type { Art, Palette } from './artkit'
 
 export type ArtTheme = 'clean' | 'classic' | 'midnight' | 'paper' | 'terminal' | 'sunset' | 'mono'
 
@@ -27,8 +27,7 @@ export type ArtTheme = 'clean' | 'classic' | 'midnight' | 'paper' | 'terminal' |
 type ThemeModule = {
   ID_TAG: string
   palette: (dark: boolean) => Palette
-  band: (v: View, W: number, dark: boolean) => Art
-  pane: (v: View, W: number, dark: boolean, version: Version) => Art
+  band: (v: View, W: number, dark: boolean, idTag?: string) => Art
 }
 
 // ---- classic ----
@@ -130,67 +129,7 @@ function classicBand(v: View, W: number, dark: boolean): Art {
   return { source: frame(W, H, p, id, body), width: W, height: H }
 }
 
-function classicPane(v: View, W: number, dark: boolean, version: Version): Art {
-  const p = classicPalette(dark)
-  const id = classicId(dark, 'p')
-  const narrow = W < 360
-  const pad = narrow ? 14 : 24
-  const big = narrow ? 24 : 34
-  const barH = narrow ? 10 : 14
-  const inner = W - pad * 2
-  let body = ''
-
-  const headH = narrow ? 34 : 46
-  body += text(pad, headH * 0.62, [{ text: 'Usage left', fill: p.text }], { size: narrow ? 13 : 15, weight: 650 })
-  let y = headH
-  body += `<rect x="${pad}" y="${y}" width="${inner}" height="1" fill="${p.divider}"/>`
-  y += narrow ? 14 : 20
-
-  const block = (r: Readout, icon: string): void => {
-    let s = icon
-    s += text(pad + 18, y + 11, [{ text: r.label.toUpperCase(), fill: p.muted }], { size: 11.5, weight: 650, spacing: 1.2 })
-    const by = y + 22 + big * 0.82
-    const spans: Span[] = [{ text: r.value, fill: r.valueFill }]
-    if (r.unit) spans.push({ text: r.unit, fill: p.muted, size: Math.round(big * 0.42), weight: 500, dx: 6 })
-    s += text(pad, by, spans, { size: big, weight: 700 })
-    const barY = by + (narrow ? 10 : 14)
-    s += pill(pad, barY, inner, barH, r.frac, r.fill, p)
-    const line = [r.detail, r.extra].filter(t => t).join(', ')
-    const ly = barY + barH + (narrow ? 16 : 20)
-    if (line) s += text(pad, ly, [{ text: line, fill: p.muted }], { size: narrow ? 11.5 : 12.5 })
-    body += r.dim ? `<g opacity=".8">${s}</g>` : s
-    y = ly + (narrow ? 20 : 28)
-  }
-
-  const na = limitsNa(v)
-  if (na) {
-    block({ ...windowReadout(v.fiveHour, p), label: 'Limits' }, limitDot(pad + 6, y + 7, 5, p))
-  } else {
-    block(windowReadout(v.fiveHour, p), limitDot(pad + 6, y + 7, 5, p))
-    block(windowReadout(v.sevenDay, p), limitDot(pad + 6, y + 7, 5, p))
-  }
-  const c = cacheReadout(v, p)
-  block({ ...c, label: 'Prompt cache' }, cacheDot(pad + 6, y + 7, 6.5, v.cache.state === 'hot', dark, p))
-
-  // Footer: the engine the mod was tested on, and a flag for any other.
-  body += `<rect x="${pad}" y="${y - 8}" width="${inner}" height="1" fill="${p.divider}"/>`
-  const foot = 'tested on ' + version.tested
-  y += 12
-  const spans: Span[] = [{ text: foot, fill: p.faint }]
-  const untested = version.actual !== null && version.actual !== version.tested
-  const note = `untested engine ${version.actual ?? ''}`
-  const oneLine = textW(foot + '  ' + note, 11.5) <= inner
-  if (untested && oneLine) spans.push({ text: note, fill: p.midText, dx: 8 })
-  body += text(pad, y, spans, { size: 11.5 })
-  if (untested && !oneLine) {
-    y += 16
-    body += text(pad, y, [{ text: note, fill: p.midText }], { size: 11.5 })
-  }
-  const H = Math.ceil(y + (narrow ? 12 : 16))
-  return { source: frame(W, H, p, id, body), width: W, height: H }
-}
-
-const classic: ThemeModule = { ID_TAG: 'c', palette: classicPalette, band: classicBand, pane: classicPane }
+const classic: ThemeModule = { ID_TAG: 'c', palette: classicPalette, band: classicBand }
 
 // ---- dispatch ----
 
@@ -212,10 +151,4 @@ export function altText(v: View): string {
 export function bandSvg(v: View, columns: number, theme: ArtTheme, dark: boolean): Art {
   const W = Math.max(60, Math.floor(Math.floor(columns) * BAND_CELL_PX))
   return THEMES[theme].band(v, W, dark)
-}
-
-/** The docked pane: a vertical card with 5-hour, 7-day and Cache blocks and a footer. */
-export function paneSvg(v: View, columns: number, theme: ArtTheme, dark: boolean, version: Version): Art {
-  const W = Math.max(120, Math.floor(Math.floor(columns) * PANE_CELL_PX))
-  return THEMES[theme].pane(v, W, dark, version)
 }

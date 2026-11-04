@@ -1,5 +1,5 @@
 // Shared, theme-agnostic pieces of the SVG art: text measuring, the readouts every theme
-// draws (what each block says), fitting and wrapping helpers, the constants of the surfaces,
+// draws (what each block says), fitting helpers, the constants of the surfaces,
 // and the small baseline drawing helpers (pill bar, panel frame) the quiet themes share.
 // Themes import this file (and ./data, ./format) and nothing else from the art code.
 import { ttlMs } from './data'
@@ -7,7 +7,6 @@ import type { CacheView, View, WindowView } from './data'
 import { formatDuration } from './format'
 
 export type Art = { source: string; width: number; height: number }
-export type Version = { tested: string; actual: string | null }
 
 /** Colours a theme draws with. Every field is read by at least one drawing or test. */
 export type Palette = {
@@ -24,11 +23,10 @@ export type Fill = 'good' | 'mid' | 'low' | 'stale' | 'frost' | 'none'
 /**
  * CSS pixels per cell. Svg sizes are CSS pixels while bodyColumns counts cells; the types
  * give no pixel size for a cell. Measured on the desktop app (CJ's PC): the band slot is
- * about 750 px at 99 columns and the docked pane about 320 px at 64 columns. An Svg wider
- * than its slot is scaled down (and looks small), so these sit just under the slot.
+ * about 750 px at 99 columns. An Svg wider than its slot is scaled down (and looks small),
+ * so this sits just under the slot.
  */
 export const BAND_CELL_PX = 7.5
-export const PANE_CELL_PX = 5
 /** The band is about two text rows tall. */
 export const BAND_H = 44
 
@@ -88,19 +86,6 @@ export function fitText(s: string, size: number, min: number, w: number, bold = 
   const cs = [...s]
   while (cs.length > 1 && textW(cs.join('') + '…', z, bold) > w) cs.pop()
   return { text: cs.join('') + '…', size: z }
-}
-
-/** Greedy word wrap into at most `maxLines` lines of width `w`; a line that still overflows is cut. */
-export function wrapText(s: string, size: number, w: number, maxLines: number): string[] {
-  const lines: string[] = []
-  // A duration like "2h 14m" stays on one line.
-  const words = s.replace(/(\d+[dhm]) (?=\d+[dhm])/g, '$1\u0001').split(' ').filter(t => t).map(t => t.replace(/\u0001/g, ' '))
-  for (const word of words) {
-    const last = lines[lines.length - 1]
-    if (last !== undefined && (textW(last + ' ' + word, size) <= w || lines.length >= maxLines)) lines[lines.length - 1] = last + ' ' + word
-    else lines.push(word)
-  }
-  return lines.map(l => fitText(l, size, size, w).text)
 }
 
 /** True when neither window has a subscription limit to show. */

@@ -4,11 +4,11 @@
 import type { View } from '../data'
 import {
   BAND_H, bandTail, cacheReadout, fillPaint, fitSize, fitText, frame, limitsNa, pill, r1, text, textW,
-  windowReadout, wrapText,
+  windowReadout,
 } from '../artkit'
-import type { Art, Palette, Readout, Span, Version } from '../artkit'
+import type { Art, Palette, Readout } from '../artkit'
 
-/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + ('b' | 'p'). Pinned by tests: do not change. */
+/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + 'b'. Pinned by tests: do not change. */
 export const ID_TAG = 'n'
 
 const DARK: Palette = {
@@ -127,94 +127,5 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
     const reads = [windowReadout(v.fiveHour, p), windowReadout(v.sevenDay, p), cache]
     reads.forEach((r, i) => { body += bandBlock(pad + i * (bw + gap), bw, r, p, compact, i === 2) })
   }
-  return { source: frame(W, H, p, id, body), width: W, height: H }
-}
-
-/** The docked pane: header, three stacked blocks (caps label, big value, thin bar, detail), footer. `W` is the finished pixel width. */
-export function pane(v: View, W: number, dark: boolean, version: Version, idTag: string = ID_TAG): Art {
-  const p = palette(dark)
-  const id = 'uh' + idTag + (dark ? 'd' : 'l') + 'p'
-  const narrow = W < 360
-  const pad = narrow ? 14 : 22
-  const big = narrow ? 26 : 36
-  const barH = narrow ? 6 : 8
-  const inner = W - pad * 2
-  const dsize = narrow ? 11.5 : 12.5
-  const lh = narrow ? 14 : 16
-  const hairline = (y: number) => `<rect x="${pad}" y="${r1(y)}" width="${inner}" height="1" fill="${p.divider}"/>`
-  let body = ''
-
-  const headH = narrow ? 36 : 46
-  const head = fitText('Usage left', narrow ? 13 : 15, 10, inner, true)
-  body += text(pad, headH * 0.64, [{ text: head.text, fill: p.text }], { size: head.size, weight: 600 })
-  body += hairline(headH)
-  let y = headH + (narrow ? 16 : 24)
-
-  const block = (r: Readout, labels: string[]): void => {
-    let s = dot(pad + 3, y + 5, r, p)
-    const lx = pad + DOT_W + 2
-    const caps = labels.map(l => l.toUpperCase())
-    const label = caps.find(l => textW(l, 10.5, true) + l.length <= inner - (lx - pad)) ?? caps[caps.length - 1]!
-    const lab = fitText(label, 10.5, 8, inner - (lx - pad), true)
-    s += text(lx, y + 9, [{ text: lab.text, fill: p.muted }], { size: lab.size, weight: 600, spacing: 1 })
-
-    // Hero: "hot" is a small word before the number; the unit trails it. Shrink, then drop the unit.
-    const word = r.value.startsWith('hot ') ? 'hot' : ''
-    const num = word ? r.value.slice(4) : r.value
-    const widthAt = (z: number, unit: boolean) =>
-      (word ? textW(word, Math.round(z * 0.42), true) + 6 : 0) + textW(num, z, true) +
-      (unit && r.unit ? textW(r.unit, Math.round(z * 0.42)) + 6 : 0)
-    let z = big
-    let unit = true
-    while (z > 14 && widthAt(z, unit) > inner) z--
-    if (widthAt(z, unit) > inner) { unit = false; z = big; while (z > 12 && widthAt(z, unit) > inner) z-- }
-    const small = Math.round(z * 0.42)
-    const numRoom = inner - (word ? textW(word, small, true) + 6 : 0)
-    const spans: Span[] = []
-    if (word) spans.push({ text: word, fill: p.muted, size: small, weight: 600 })
-    spans.push({ text: widthAt(z, unit) > inner ? fitText(num, z, 8, numRoom, true).text : num, fill: r.valueFill, dx: word ? 6 : 0 })
-    if (unit && r.unit) spans.push({ text: r.unit, fill: p.muted, size: small, weight: 500, dx: 6 })
-    const by = y + 20 + z * 0.72
-    s += text(pad, by, spans, { size: z, weight: 650 })
-
-    const barY = by + (narrow ? 10 : 13)
-    s += pill(pad, barY, inner, barH, r.frac, r.fill, p)
-    const lines = wrapText([r.detail, r.extra].filter(t => t).join(', '), dsize, inner, 3)
-    let ly = barY + barH + (narrow ? 15 : 18)
-    lines.forEach((l, i) => { s += text(pad, ly + i * lh, [{ text: l, fill: p.muted }], { size: dsize }) })
-    ly += Math.max(0, lines.length - 1) * lh
-    body += r.dim ? `<g opacity=".8">${s}</g>` : s
-    y = ly + (narrow ? 22 : 30)
-  }
-
-  const na = limitsNa(v)
-  if (na) {
-    block({ ...windowReadout(v.fiveHour, p), label: 'Limits' }, ['Limits'])
-  } else {
-    const w5 = windowReadout(v.fiveHour, p)
-    const w7 = windowReadout(v.sevenDay, p)
-    block(w5, [w5.label, w5.short])
-    block(w7, [w7.label, w7.short])
-  }
-  block(cacheReadout(v, p), ['Prompt cache', 'Cache'])
-
-  // Footer: the engine the mod was tested on, and a flag for any other.
-  body += hairline(y - 12)
-  y += 6
-  const footText = 'tested on ' + version.tested
-  const foot = fitText(footText, 11.5, 9, inner)
-  const untested = version.actual !== null && version.actual !== version.tested
-  const note = `untested engine ${version.actual ?? ''}`
-  const oneLine = foot.text === footText && textW(footText + '  ' + note, 11.5) <= inner - 6
-  const spans: Span[] = [{ text: foot.text, fill: p.faint }]
-  if (untested && oneLine) spans.push({ text: note, fill: p.midText, dx: 8 })
-  body += text(pad, y, spans, { size: foot.size })
-  if (untested && !oneLine) {
-    for (const l of wrapText(note, 11.5, inner, 2)) {
-      y += 16
-      body += text(pad, y, [{ text: l, fill: p.midText }], { size: 11.5 })
-    }
-  }
-  const H = Math.ceil(y + (narrow ? 12 : 16))
   return { source: frame(W, H, p, id, body), width: W, height: H }
 }

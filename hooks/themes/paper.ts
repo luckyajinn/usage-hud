@@ -5,12 +5,12 @@
 // green, ochre, brick red, warm grey for stale readings, and a blue-black ink for the cache.
 import type { View } from '../data'
 import {
-  BAND_H, bandTail, cacheReadout, esc, fillPaint, fitSize, fitText, limitsNa, r1, text, textW,
-  windowReadout, wrapText,
+  BAND_H, bandTail, cacheReadout, esc, fillPaint, fitText, limitsNa, r1, text, textW,
+  windowReadout,
 } from '../artkit'
-import type { Art, Fill, Palette, Readout, Span, Version } from '../artkit'
+import type { Art, Fill, Palette, Readout, Span } from '../artkit'
 
-/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + ('b' | 'p'). Pinned: do not change. */
+/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + 'b'. Pinned: do not change. */
 export const ID_TAG = 'a'
 
 // ---- palette ----
@@ -43,9 +43,6 @@ const SF = 1.14
 const sw = (s: string, z: number, bold = false): number => textW(s, z, bold) * SF
 /** Width of a small-caps label (drawn as spaced capitals), as the generic tests measure it plus margin. */
 const capsW = (s: string, z: number, sp: number): number => textW(s, z, true) * SF + s.length * sp
-/** Largest size in [min, max] at which `s` fits `w` in serif, or null. */
-const fitSerif = (s: string, max: number, min: number, w: number, bold = false): number | null =>
-  fitSize(s, max, min, w / SF, bold)
 /** Italic is a group wrapper, so the <text> elements keep the shared attribute order. */
 const italic = (s: string): string => (s ? `<g font-style="italic">${s}</g>` : '')
 const rect = (x: number, y: number, w: number, h: number, fill: string, extra = ''): string =>
@@ -190,119 +187,5 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
       body += bandBlock(bx, bw, r, p, compact, i === 2)
     })
   }
-  return { source: sheet(W, H, p, id, body), width: W, height: H }
-}
-
-// ---- pane ----
-
-/** The docked pane: masthead, three columns stacked as entries, footer. `W` is the finished pixel width. */
-export function pane(v: View, W: number, dark: boolean, version: Version, idTag: string = ID_TAG): Art {
-  const p = palette(dark)
-  const id = 'uh' + idTag + (dark ? 'd' : 'l') + 'p'
-  const narrow = W < 360
-  const pad = narrow ? 14 : 22
-  const big = narrow ? 28 : 38
-  const inner = W - pad * 2
-  const dsize = narrow ? 11.5 : 12.5
-  const lh = narrow ? 14 : 16
-  const hairline = (y: number) => rect(pad, y, inner, 1, p.divider)
-  /** A printer's double rule: heavier ink line over a hairline. */
-  const doubleRule = (y: number) => rect(pad, y, inner, 1.5, p.track) + rect(pad, y + 3.5, inner, 0.75, p.track)
-  let body = ''
-
-  // Masthead: serif title, double rule under it.
-  const headH = narrow ? 34 : 44
-  const head = fitText('Usage left', narrow ? 15 : 18, 10, inner / SF)
-  body += text(pad, headH * 0.66, [{ text: head.text, fill: p.text }], { size: head.size, weight: 400 })
-  body += doubleRule(headH - 2)
-  let y = headH + (narrow ? 16 : 22)
-
-  const block = (r: Readout, labels: string[], ticks: boolean): void => {
-    const lz = narrow ? 9 : 9.5
-    const sp = 1.8
-    const caps = labels.map(l => l.toUpperCase())
-    const label = caps.find(l => capsW(l, lz, sp) <= inner) ?? caps[caps.length - 1]!
-    let s = ''
-    if (capsW(label, lz, sp) <= inner) {
-      s += text(pad, y + 9, [{ text: label, fill: p.muted }], { size: lz, weight: 600, spacing: sp })
-    } else {
-      const lab = fitText(label, lz, 7, (inner - label.length * sp) / SF, true)
-      s += text(pad, y + 9, [{ text: lab.text, fill: p.muted }], { size: lab.size, weight: 600, spacing: sp })
-    }
-
-    // Hero: roman serif numeral; "hot" is a small word before it, an italic "left" trails it.
-    const word = r.value.startsWith('hot ') ? 'hot' : ''
-    const num = word ? r.value.slice(4) : r.value
-    const smallZ = (z: number) => Math.round(z * 0.42)
-    const widthAt = (z: number, unit: boolean) =>
-      (word ? sw(word, smallZ(z)) + 6 : 0) + sw(num, z, true) + (unit && r.unit ? sw(r.unit, smallZ(z)) + 6 : 0)
-    let z = big
-    let unit = true
-    while (z > 14 && widthAt(z, unit) > inner) z--
-    if (widthAt(z, unit) > inner) { unit = false; z = big; while (z > 12 && widthAt(z, unit) > inner) z-- }
-    const small = smallZ(z)
-    const numRoom = inner - (word ? sw(word, small) + 6 : 0)
-    const by = y + 18 + z * 0.74
-    const lead: Span[] = []
-    if (word) lead.push({ text: word, fill: p.muted, size: small, weight: 400 })
-    lead.push({ text: widthAt(z, unit) > inner ? fitText(num, z, 8, numRoom / SF, true).text : num, fill: r.valueFill, dx: word ? 6 : 0 })
-    // The unit rides in the same <text> (so it sits right after the real glyphs) and is set italic.
-    if (unit && r.unit) lead.push({ text: r.unit, fill: p.muted, size: small, weight: 400, dx: 6 })
-    let hero = text(pad, by, lead, { size: z, weight: 600 })
-    if (unit && r.unit) hero = hero.replace(/<tspan(?=[^>]*>[^<]*<\/tspan><\/text>$)/, '<tspan font-style="italic"')
-    s += hero
-
-    // The ruled scale, with its 0 / 50 / 100 figures for the limit windows when they fit.
-    const ruleY = by + (narrow ? 11 : 14)
-    const tick = narrow ? 5 : 6
-    s += scale(pad, ruleY, inner, r.frac, r.fill, p, tick, narrow ? 4 : 5)
-    let ly = ruleY + tick + (narrow ? 14 : 17)
-    if (ticks && inner >= 80) {
-      const fz = 8.5
-      const fy = ruleY + tick + 10
-      s += text(pad, fy, [{ text: '0', fill: p.faint }], { size: fz })
-      s += text(pad + inner / 2 - sw('50', fz) / 2, fy, [{ text: '50', fill: p.faint }], { size: fz })
-      s += text(pad + inner, fy, [{ text: '100', fill: p.faint }], { size: fz, anchor: 'end' })
-      ly = fy + (narrow ? 15 : 18)
-    }
-    const lines = wrapText([r.detail, r.extra].filter(t => t).join(', '), dsize, inner / SF, 3)
-    s += italic(lines.map((l, i) => text(pad, ly + i * lh, [{ text: l, fill: p.muted }], { size: dsize })).join(''))
-    ly += Math.max(0, lines.length - 1) * lh
-    body += r.dim ? `<g opacity=".8">${s}</g>` : s
-    y = ly + (narrow ? 20 : 26)
-  }
-
-  if (limitsNa(v)) {
-    block({ ...windowReadout(v.fiveHour, p), label: 'Limits' }, ['Limits'], false)
-  } else {
-    const w5 = windowReadout(v.fiveHour, p)
-    const w7 = windowReadout(v.sevenDay, p)
-    block(w5, [w5.label, w5.short], true)
-    body += hairline(y - (narrow ? 10 : 13))
-    block(w7, [w7.label, w7.short], true)
-  }
-  body += hairline(y - (narrow ? 10 : 13))
-  block(cacheReadout(v, p), ['Prompt cache', 'Cache'], false)
-
-  // Colophon: the engine the mod was tested on, and a flag for any other.
-  body += doubleRule(y - (narrow ? 11 : 14))
-  y += 6
-  const fz = 11.5
-  const footText = 'tested on ' + version.tested
-  const foot = fitText(footText, fz, 9, inner / SF)
-  const untested = version.actual !== null && version.actual !== version.tested
-  const note = `untested engine ${version.actual ?? ''}`
-  const oneLine = foot.text === footText && sw(footText + '  ' + note, fz) <= inner - 8
-  const spans: Span[] = [{ text: foot.text, fill: p.faint }]
-  if (untested && oneLine) spans.push({ text: note, fill: p.midText, dx: 8 })
-  let foots = text(pad, y, spans, { size: foot.size })
-  if (untested && !oneLine) {
-    for (const l of wrapText(note, fz, inner / SF, 2)) {
-      y += 16
-      foots += text(pad, y, [{ text: l, fill: p.midText }], { size: fz })
-    }
-  }
-  body += italic(foots)
-  const H = Math.ceil(y + (narrow ? 12 : 16))
   return { source: sheet(W, H, p, id, body), width: W, height: H }
 }

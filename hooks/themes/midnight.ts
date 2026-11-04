@@ -6,14 +6,14 @@
 //
 // Layout differs from clean on purpose: in the band each block puts its caps label and tail on
 // a small top row, and the big numeral shares the second row with its bar, which ends in a
-// bright "leading edge" cap. In the pane every reading sits in its own inset glass card.
+// bright "leading edge" cap.
 import type { View } from '../data'
 import {
-  BAND_H, FONT, bandTail, cacheReadout, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout, wrapText,
+  BAND_H, FONT, bandTail, cacheReadout, esc, fitText, limitsNa, r1, text, textW, windowReadout,
 } from '../artkit'
-import type { Art, Fill, Palette, Readout, Span, Version } from '../artkit'
+import type { Art, Fill, Palette, Readout, Span } from '../artkit'
 
-/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + ('b' | 'p'). Pinned by tests: do not change. */
+/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + 'b'. Pinned by tests: do not change. */
 export const ID_TAG = 'm'
 
 // ---- palette ----
@@ -249,106 +249,5 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
       body += bandBlock(x, bw, r, p, id, compact, i === 2, inlineOk)
     })
   }
-  return { source: glass(W, H, p, dark, id, body), width: W, height: H }
-}
-
-// ---- pane ----
-
-/**
- * The docked pane: a light title, then each reading in an inset glass card (dot and caps label,
- * a big light numeral with its unit, the gradient bar, the wrapped detail), then the footer.
- */
-export function pane(v: View, W: number, dark: boolean, version: Version, idTag: string = ID_TAG): Art {
-  const p = palette(dark)
-  const id = 'uh' + idTag + (dark ? 'd' : 'l') + 'p'
-  const narrow = W < 360
-  const pad = narrow ? 10 : 16
-  const cpad = narrow ? 10 : 14 // inside a card
-  const big = narrow ? 30 : 42
-  const barH = narrow ? 3 : 4
-  const cx = pad
-  const cw = W - pad * 2
-  const inner = cw - cpad * 2
-  const dsize = narrow ? 11 : 12
-  const lh = narrow ? 14 : 16
-  const cardFill = dark ? '#ffffff' : '#ffffff'
-  const cardOp = dark ? 0.035 : 0.7
-  let body = ''
-
-  // Title row: a light heading and a short glowing accent rule under it.
-  const headH = narrow ? 34 : 44
-  const head = fitText('Usage left', narrow ? 14 : 17, 10, W - pad * 2 - 4)
-  body += text(pad + 2, headH * 0.62, [{ text: head.text, fill: p.text }], { size: head.size, weight: 300, spacing: 0.3 })
-  body += `<rect x="${pad + 2}" y="${headH - 6}" width="${Math.min(56, cw / 3)}" height="1.5" rx=".75" fill="url(#${id}Ffrost)"/>`
-  let y = headH + (narrow ? 4 : 6)
-
-  const block = (r: Readout, labels: string[]): void => {
-    const top = y
-    const ix = cx + cpad
-    let ty = top + cpad + 8 // label baseline
-    let s = dot(ix + 3.4, ty - 3.3, r.fill, p, id)
-    const lx = ix + DOT_W + 1
-    const caps = labels.map(l => l.toUpperCase())
-    const lsz = narrow ? 9.5 : 10
-    const label = caps.find(l => lx + capsW(l, lsz) <= ix + inner) ?? caps[caps.length - 1]!
-    const lab = fitText(label, lsz, 7, ix + inner - lx - label.length * LABEL_SP)
-    s += text(lx, ty, [{ text: lab.text, fill: p.muted }], { size: lab.size, weight: 500, spacing: LABEL_SP })
-
-    // Hero: shrink, then drop the unit, then cut.
-    const unitW = (z: number) => (r.unit ? textW(r.unit, Math.round(z * 0.38)) + 7 : 0)
-    const heroW = (z: number, unit: boolean) => heroSpans(r, r.value, z, p).w + (unit ? unitW(z) : 0)
-    let z = big
-    let unit = true
-    while (z > 14 && heroW(z, unit) > inner) z--
-    if (heroW(z, unit) > inner) { unit = false; z = big; while (z > 12 && heroW(z, unit) > inner) z-- }
-    let spans = heroSpans(r, r.value, z, p).spans
-    if (heroW(z, unit) > inner) spans = [{ text: fitText(r.value, z, 8, inner).text, fill: r.valueFill }]
-    if (unit && r.unit) spans.push({ text: r.unit, fill: p.muted, size: Math.round(z * 0.38), weight: 400, dx: 7 })
-    const by = ty + 8 + z * 0.74
-    s += text(ix, by, spans, { size: z, weight: 200 })
-
-    const barY = by + (narrow ? 9 : 12)
-    s += bar(ix, barY, inner, barH, r.frac, r.fill, p, id)
-    const lines = wrapText([r.detail, r.extra].filter(t => t).join(', '), dsize, inner, 3)
-    let ly = barY + barH + (narrow ? 14 : 17)
-    lines.forEach((l, i) => { s += text(ix, ly + i * lh, [{ text: l, fill: p.muted }], { size: dsize }) })
-    ly += Math.max(0, lines.length - 1) * lh
-    const bottom = ly + cpad - 2
-    const card = `<rect x="${cx + 0.5}" y="${r1(top + 0.5)}" width="${cw - 1}" height="${r1(bottom - top - 1)}" rx="8" fill="${cardFill}" fill-opacity="${cardOp}" stroke="${p.border}" stroke-opacity=".8"/>` +
-      `<rect x="${cx + 8}" y="${r1(top + 1)}" width="${Math.max(0, cw - 16)}" height="1" fill="url(#${id}H)" opacity=".7"/>`
-    body += card + (r.dim ? `<g opacity=".8">${s}</g>` : s)
-    y = bottom + (narrow ? 8 : 10)
-  }
-
-  if (limitsNa(v)) {
-    block({ ...windowReadout(v.fiveHour, p), label: 'Limits' }, ['Limits'])
-  } else {
-    const w5 = windowReadout(v.fiveHour, p)
-    const w7 = windowReadout(v.sevenDay, p)
-    block(w5, [w5.label, w5.short])
-    block(w7, [w7.label, w7.short])
-  }
-  block(cacheReadout(v, p), ['Prompt cache', 'Cache'])
-
-  // Footer: the engine the mod was tested on, and a flag for any other.
-  y += narrow ? 8 : 10
-  const fz = narrow ? 10.5 : 11
-  const fx = pad + 2
-  const fw = W - fx - pad
-  const footText = 'tested on ' + version.tested
-  const foot = fitText(footText, fz, 8, fw)
-  const untested = version.actual !== null && version.actual !== version.tested
-  const note = `untested engine ${version.actual ?? ''}`
-  const oneLine = foot.text === footText && textW(footText, fz) + 10 + textW(note, fz) <= fw - 2
-  const spans: Span[] = [{ text: foot.text, fill: p.faint }]
-  if (untested && oneLine) spans.push({ text: note, fill: p.midText, dx: 10 })
-  body += text(fx, y, spans, { size: foot.size, weight: 300 })
-  if (untested && !oneLine) {
-    for (const l of wrapText(note, fz, fw, 2)) {
-      y += 15
-      body += text(fx, y, [{ text: l, fill: p.midText }], { size: fz })
-    }
-  }
-  const H = Math.ceil(y + (narrow ? 12 : 16))
   return { source: glass(W, H, p, dark, id, body), width: W, height: H }
 }

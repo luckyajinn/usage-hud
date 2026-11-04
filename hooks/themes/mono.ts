@@ -5,11 +5,11 @@
 // red under 20, mid grey when a reading is stale. Healthy stays quiet; trouble stands out.
 import type { View } from '../data'
 import {
-  BAND_H, bandTail, cacheReadout, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout, wrapText,
+  BAND_H, bandTail, cacheReadout, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout,
 } from '../artkit'
-import type { Art, Fill, Palette, Readout, Span, Version } from '../artkit'
+import type { Art, Fill, Palette, Readout, Span } from '../artkit'
 
-/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + ('b' | 'p'). */
+/** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + 'b'. */
 export const ID_TAG = 'o'
 
 /** Neo-grotesk first, then the platform sans; light weights carry the numerals. */
@@ -175,111 +175,5 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
     }
   }
   body += `<rect x="0" y="${H - 1}" width="${W}" height="1" fill="${p.divider}"/>`
-  return { source: ground(W, H, p, id, body), width: W, height: H }
-}
-
-// ---- pane ----
-
-/** The docked pane: a tracked caps title over a hairline, three numbered blocks, a quiet footer. */
-export function pane(v: View, W: number, dark: boolean, version: Version, idTag: string = ID_TAG): Art {
-  const p = palette(dark)
-  const id = 'uh' + idTag + (dark ? 'd' : 'l') + 'p'
-  const narrow = W < 260
-  const pad = narrow ? 14 : 24
-  const big = narrow ? 44 : 60
-  const inner = W - pad * 2
-  const dsize = narrow ? 11 : 12
-  const lh = narrow ? 14 : 16
-  const capZ = narrow ? 9 : 9.5
-  const capS = narrow ? 1.4 : 1.8
-  const hairline = (y: number) => `<rect x="${pad}" y="${r1(y)}" width="${inner}" height="1" fill="${p.divider}"/>`
-  let body = ''
-
-  // Title: tiny tracked caps, then the only rule above the blocks.
-  let y = narrow ? 24 : 32
-  const title = fitText('USAGE LEFT', capZ, 8, inner, true)
-  body += text(pad, y, [{ text: title.text, fill: p.muted }], { size: title.size, weight: 600, spacing: capS })
-  y += narrow ? 10 : 14
-  body += hairline(y)
-  y += narrow ? 22 : 32
-
-  let n = 0
-  const block = (r: Readout, labels: string[]): void => {
-    n++
-    // Label row: caps label left, the block number right in faint (dropped when tight).
-    const caps = labels.map(l => l.toUpperCase())
-    const idx = '0' + n
-    const idxW = capsW(idx, capZ, capS)
-    const label = caps.find(l => capsW(l, capZ, capS) <= inner - idxW - 10)
-    let s = ''
-    if (label) {
-      s += text(pad, y, [{ text: label, fill: p.muted }], { size: capZ, weight: 600, spacing: capS })
-      s += text(pad + inner, y, [{ text: idx, fill: p.faint }], { size: capZ, weight: 400, spacing: capS, anchor: 'end' })
-    } else {
-      const f = fitText(caps[caps.length - 1]!, capZ, 7, inner - caps[caps.length - 1]!.length * capS, true)
-      s += text(pad, y, [{ text: f.text, fill: p.muted }], { size: f.size, weight: 600, spacing: capS })
-    }
-
-    // Hero: a thin numeral; "hot" before and "left" after are small. Shrink, then drop the unit.
-    const word = r.value.startsWith('hot ') ? 'hot' : ''
-    const num = word ? r.value.slice(4) : r.value
-    const smallOf = (z: number) => Math.max(10, Math.round(z * 0.24))
-    const widthAt = (z: number, unit: boolean) =>
-      (word ? textW(word, smallOf(z)) + 6 : 0) + textW(num, z) + (unit && r.unit ? textW(r.unit, smallOf(z)) + 6 : 0)
-    let z = big
-    let unit = true
-    while (z > 18 && widthAt(z, unit) > inner) z--
-    if (widthAt(z, unit) > inner) { unit = false; z = big; while (z > 14 && widthAt(z, unit) > inner) z-- }
-    const small = smallOf(z)
-    const numRoom = inner - (word ? textW(word, small) + 6 : 0)
-    const spans: Span[] = []
-    if (word) spans.push({ text: word, fill: p.muted, size: small, weight: 400 })
-    spans.push({ text: widthAt(z, unit) > inner ? fitText(num, z, 10, numRoom).text : num, fill: r.valueFill, dx: word ? 6 : 0 })
-    if (unit && r.unit) spans.push({ text: r.unit, fill: p.muted, size: small, weight: 400, dx: 6 })
-    const by = y + 10 + z * 0.78
-    s += text(pad, by, spans, { size: z, weight: 200 })
-
-    // Slider, full width, then the details in small muted type.
-    const ty = by + (narrow ? 14 : 18)
-    s += slider(pad, ty, inner, r, p, { rad: narrow ? 4 : 5, ticks: !word && r.value !== 'cold' })
-    const lines = wrapText([r.detail, r.extra].filter(t => t).join(', '), dsize, inner, 3)
-    let ly = ty + (narrow ? 20 : 26)
-    const df = r.detail.startsWith('limit reached') ? p.lowText : p.muted
-    lines.forEach((l, i) => { s += text(pad, ly + i * lh, [{ text: l, fill: df }], { size: dsize }) })
-    ly += Math.max(0, lines.length - 1) * lh
-    body += r.dim ? `<g opacity=".85">${s}</g>` : s
-    y = ly + (narrow ? 34 : 48)
-  }
-
-  if (limitsNa(v)) {
-    block({ ...windowReadout(v.fiveHour, p), label: 'Limits', detail: 'no subscription limits on this plan' }, ['Limits'])
-  } else {
-    const w5 = windowReadout(v.fiveHour, p)
-    const w7 = windowReadout(v.sevenDay, p)
-    block(w5, [w5.label, w5.short])
-    block(w7, [w7.label, w7.short])
-  }
-  block(cacheReadout(v, p), ['Prompt cache', 'Cache'])
-
-  // Footer: the engine the mod was tested on, and a flag for any other.
-  y -= narrow ? 16 : 22
-  body += hairline(y)
-  y += narrow ? 18 : 22
-  const fz = narrow ? 10 : 10.5
-  const footText = 'tested on ' + version.tested
-  const foot = fitText(footText, fz, 8, inner)
-  const untested = version.actual !== null && version.actual !== version.tested
-  const note = `untested engine ${version.actual ?? ''}`
-  const oneLine = foot.text === footText && textW(footText + '  ' + note, fz) <= inner - 8
-  const spans: Span[] = [{ text: foot.text, fill: p.faint }]
-  if (untested && oneLine) spans.push({ text: note, fill: p.midText, dx: 8 })
-  body += text(pad, y, spans, { size: foot.size })
-  if (untested && !oneLine) {
-    for (const l of wrapText(note, fz, inner, 2)) {
-      y += 15
-      body += text(pad, y, [{ text: l, fill: p.midText }], { size: fz })
-    }
-  }
-  const H = Math.ceil(y + (narrow ? 16 : 22))
   return { source: ground(W, H, p, id, body), width: W, height: H }
 }

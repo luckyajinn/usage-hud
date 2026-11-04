@@ -55,7 +55,7 @@ const engine = (
   const count = (k: string) => {
     calls[k] = (calls[k] ?? 0) + 1
   }
-  const fail = { storeGet: false, open: false }
+  const fail = { storeGet: false }
   on('store.get', (_, e) => {
     if (fail.storeGet) throw new TypeError('EACCES C:/Users/cj/.claude/plugins/store')
     return { value: mem[e.key] }
@@ -68,19 +68,16 @@ const engine = (
     delete mem[e.key]
     return { value: undefined }
   })
+  // Spy: the mod draws only the band, so nothing may ever ask the engine to open a pane.
   const opens: string[] = []
   const logs: string[] = []
   on('session.usage', () => ({ value: { startedAt: NOW, context: { window: 200000 }, rateLimits } }))
-  on('session.version', () => ({ value: { version: '2.1.316' } }))
   on('session.surfaces', () => ({ value: surfaces }))
   on('session.start', (_, e) => {
     count('session.start')
     return { cwd: e.cwd }
   })
   on('ui.open', (_, e) => {
-    if (fail.open) throw new TypeError('no surface C:/Users/cj')
-    // Like the engine: nothing is placed while no surface is attached.
-    if (surfaces.length === 0) return { value: { isPlaced: false, reason: 'no-surface' } }
     opens.push(e.id)
     return { value: { isPlaced: true } }
   })
@@ -174,7 +171,7 @@ type Ui = {
   findAll: (q: { type: string }) => Promise<Found[]>
 }
 
-// Whole text of the first Box (the band row, or the pane column); bar cells are spaces here.
+// Whole text of the first Box (the band row); bar cells are spaces here.
 const allText = async (ui: Ui) => (await ui.find({ type: 'Box' }))?.text ?? ''
 
 // A Text as shown, a bar run written out: '-' for the track (subtle), '#' for a fill.
@@ -206,13 +203,14 @@ const bandText = async ($: Engine, cols = 99) => {
   await ui.unmount()
   return t
 }
-// Pane rows joined by newlines.
-const paneText = async ($: Engine, cols = 30) => {
-  const ui = await $.ui.mount({ ...pane('dock', cols), surface: 'desktop' })
-  const t = (await rowsOf(ui)).join('\n')
-  await ui.unmount()
-  return t
-}
+
+const runCommand = ($: Engine) =>
+  $.command.run({
+    command: 'usage-hud', args: '', origin: { kind: 'composer' },
+    presentation: { isFullscreen: true, columns: 120 },
+  })
+// The /usage-hud readout: the text that spells out each state (cold reasons, ages).
+const readout = async ($: Engine) => (await runCommand($)).text
 
 // ---- drawing ----
 
@@ -260,36 +258,24 @@ test('band under 6 columns gives the engine band; at 6 it cuts to fit (F9)', asy
   expect(await bandText($, 6)).toBe('72% 40')
 })
 
-test('pane draws docked and inline on terminal and desktop', async ($, on) => {
+test('the Pane component is not handled: render falls through to the engine', async ($, on) => {
   const { opens } = engine(on, [])
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
   await start($)
   await measure($)
-  expect(opens).toEqual(['usage-hud'])
   for (const surface of ['terminal', 'desktop'] as const) {
-    const dock = await $.ui.mount({ ...pane('dock'), surface })
-    // 30 columns: 17-cell bars.
-    expect(await rowsOf(dock)).toEqual([
-      '5-hour',
-      '  ############----- 72% left',
-      '  resets in 2h 14m',
-      '7-day',
-      '  #######---------- 40% left',
-      '  resets in 3d 4h',
-      'Cache (estimate)',
-      '  ----------------- cold',
-      '  (new)',
-      'tested on 2.1.316',
-    ])
-    await dock.unmount()
-
-    const wideInline = await $.ui.mount({ ...pane('inline', 80), surface })
-    expect(await rowsOf(wideInline)).toEqual([WIDE])
-    await wideInline.unmount()
-
-    const inline = await $.ui.mount({ ...pane('inline', 40), surface })
-    expect(await rowsOf(inline)).toEqual(['5h 72% 2h14m | 7d 40% 3d4h', 'cold'])
-    await inline.unmount()
+    for (const [placement, cols] of [['dock', 30], ['dock', 64], ['inline', 40], ['inline', 80]] as const) {
+      const p = await $.ui.mount({ ...pane(placement, cols), surface })
+      expect((await p.find({ type: 'Text' }))?.text).toBe('engine')
+      expect(await p.find({ type: 'Svg' })).toBe(undefined)
+      expect(await p.findAll({ type: 'Text' })).toHaveLength(1)
+      await p.unmount()
+    }
   }
+  expect(opens).toEqual([])
 })
 
 test('session.measure updates a mounted band', async ($, on) => {
@@ -354,23 +340,21 @@ test('no data: no readings and no stored snapshot', async ($, on) => {
     const ui = await $.ui.mount({ ...band(80), surface })
     expect(await shown(ui)).toBe(NONE)
     await ui.unmount()
-    const p = await $.ui.mount({ ...pane('dock'), surface })
-    expect(await rowsOf(p)).toEqual([
-      '5-hour', '  --', '7-day', '  --', 'Cache (estimate)', '  ----------------- cold', '  (new)', 'tested on 2.1.316',
-    ])
-    await p.unmount()
   }
+  expect(await readout($)).toBe(
+    ['5-hour: no reading yet', '7-day: no reading yet', 'Cache: cold (new)', 'Cache state is an estimate.'].join('\n'),
+  )
 })
 
 test('stored snapshot shows dim with its age', async ($, on) => {
   engine(on, [], { limits: { observedAt: NOW - 30 * MIN, items: LIMITS } })
   await start($)
-  const ui = await $.ui.mount({ ...pane('dock'), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(99), surface: 'desktop' })
   const text = await allText(ui)
-  expect(text).toContain('72% left')
-  expect(text).toContain('as of 30m ago')
+  expect(text).toContain('72%')
   expect((await ui.find({ type: 'Text', text: '72%' }))?.props.dimColor).toBe(true)
   await ui.unmount()
+  expect(await readout($)).toContain('5-hour: 72% left, resets in 2h 14m (as of 30m ago)')
 })
 
 test('bar runs draw as Text with backgroundColor, track subtle', async ($, on) => {
@@ -394,22 +378,6 @@ test('bar runs draw as Text with backgroundColor, track subtle', async ($, on) =
   const plain = (await ui.findAll({ type: 'Text' })).filter(t => t.props.backgroundColor === undefined)
   expect(plain.some(t => t.text === '72%')).toBe(true)
   await ui.unmount()
-  // Docked pane at 64 columns: 24-cell bars, same colours.
-  const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
-  expect((await rowsOf(p)).slice(0, 8)).toEqual([
-    '5-hour',
-    '  #################------- 72% left',
-    '  resets in 2h 14m',
-    '7-day',
-    '  ##########-------------- 40% left',
-    '  resets in 3d 4h',
-    'Cache (estimate)',
-    '  ######################## hot 60m',
-  ])
-  expect((await barsOf(p)).map(t => [t.props.backgroundColor, t.text.length])).toEqual([
-    ['success', 17], ['subtle', 7], ['warning', 10], ['subtle', 14], ['success', 24],
-  ])
-  await p.unmount()
 })
 
 test('bar colours: error under 20, inactive when stale', async ($, on) => {
@@ -495,7 +463,7 @@ test('a main step reaches the engine once; no cache use gives no stamp', async (
   const r = await step($)
   expect(r.answer).toBe('ok')
   expect(calls()).toBe(1)
-  expect(await paneText($)).toContain('  ----------------- cold\n  (new)')
+  expect(await readout($)).toContain('Cache: cold (new)')
 })
 
 test('a subagent step passes through once and is not stamped', async ($, on) => {
@@ -567,7 +535,7 @@ test('PostCompact reads cold (compacted) until the next main step', async ($, on
   await step($)
   expect(await bandText($)).toContain('|  Cache ########## hot 60m')
   await $.classic.PostCompact({ trigger: 'auto', compact_summary: 's' })
-  expect(await paneText($)).toContain('  ----------------- cold\n  (compacted)')
+  expect(await readout($)).toContain('Cache: cold (compacted)')
   expect(await bandText($)).toContain('|  Cache ---------- cold')
   await step($)
   expect(await bandText($)).toContain('|  Cache ########## hot 60m')
@@ -579,7 +547,7 @@ test('SessionStart compact reads cold (compacted)', async ($, on) => {
   await start($)
   await step($)
   await $.classic.SessionStart({ source: 'compact' })
-  expect(await paneText($)).toContain('  ----------------- cold\n  (compacted)')
+  expect(await readout($)).toContain('Cache: cold (compacted)')
 })
 
 test('PostModelSwitch: the old stamp reads cold (model changed)', async ($, on) => {
@@ -588,7 +556,7 @@ test('PostModelSwitch: the old stamp reads cold (model changed)', async ($, on) 
   await start($)
   await step($)
   await modelSwitch($, 'm2', '5m')
-  expect(await paneText($)).toContain('  ----------------- cold\n  (model changed)')
+  expect(await readout($)).toContain('Cache: cold (model changed)')
 })
 
 test('/clear: SessionStart clear and session.end clear reset the cache, limits kept', async ($, on) => {
@@ -623,14 +591,14 @@ test('resume without seconds_since_last_response never keeps the old hot stamp (
   await start($)
   await step($)
   await $.classic.SessionStart({ source: 'resume' })
-  expect(await paneText($)).toContain('  ----------------- cold\n  (new)')
+  expect(await readout($)).toContain('Cache: cold (new)')
 })
 
 test('resume with prompt_cache_likely_expired reads cold', async ($, on) => {
   engine(on, LIMITS)
   await start($)
   await $.classic.SessionStart({ source: 'resume', seconds_since_last_response: 120, prompt_cache_likely_expired: true })
-  expect(await paneText($)).toContain('  ----------------- cold\n  (expired on resume)')
+  expect(await readout($)).toContain('Cache: cold (expired on resume)')
 })
 
 test('resume within the TTL reads hot from seconds_since_last_response', async ($, on) => {
@@ -658,11 +626,7 @@ test('auto with nothing learned uses 1h', async ($, on) => {
   await clock.advance(30 * MIN)
   expect(await bandText($)).toContain('|  Cache #####----- hot 30m')
   expect(mem.ttl).toBe(undefined)
-  const r = await $.command.run({
-    command: 'usage-hud', args: '', origin: { kind: 'composer' },
-    presentation: { isFullscreen: true, columns: 120 },
-  })
-  expect(r.text).toContain('Cache: hot, 30m left of 1h TTL')
+  expect(await readout($)).toContain('Cache: hot, 30m left of 1h TTL')
 })
 
 test('PostModelSwitch cache_ttl 1h is learned and stored, moving a stored 5m up', async ($, on) => {
@@ -798,7 +762,7 @@ test('live limits read long ago draw stale with their age (F2)', async ($, on) =
   const ui = await $.ui.mount({ ...band(99), surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: '40%' }))?.props.dimColor).toBe(true)
   await ui.unmount()
-  expect(await paneText($)).toContain('as of 3h 0m ago')
+  expect(await readout($)).toContain('as of 3h 0m ago')
 })
 
 test('session.start: usage readings only when no snapshot, and drawn stale (F3)', async ($, on) => {
@@ -817,7 +781,7 @@ test('session.start never stamps usage over a stored snapshot (F3)', async ($, o
   await clock.advance(2 * H)
   await start($)
   expect(mem.limits).toEqual(stored)
-  expect(await paneText($)).toContain('50% left')
+  expect(await readout($)).toContain('5-hour: 50% left')
 })
 
 test('n/a only after a step with a response, not from turn.complete (F5)', async ($, on) => {
@@ -851,46 +815,44 @@ test('debug log carries the hook and error name only (F13)', async ($, on) => {
   expect(logs.some(l => l.includes('Users'))).toBe(false)
 })
 
-// ---- pane opening (F11) ----
+// ---- no pane: the mod draws only the band ----
 
-test('no unasked open on a terminal start', async ($, on) => {
-  const { opens } = engine(on, LIMITS, {}, ['terminal'])
-  await start($, 'terminal')
+test('session.start never opens a pane, on any surface', async ($, on) => {
+  const { opens } = engine(on, LIMITS, {}, ['desktop', 'terminal'])
+  for (const surface of [null, 'desktop', 'terminal', 'mobile'] as const) {
+    await $.session.start({ cwd: '/', surface, isInteractive: true })
+  }
+  await start($)
+  await start($)
   expect(opens).toEqual([])
 })
 
-test('no unasked open on a terminal start, even with no surface listed yet', async ($, on) => {
-  const { opens } = engine(on, LIMITS, {}, [])
+test('session.start never opens a pane, even with no surface listed yet', async ($, on) => {
+  const { opens, logs } = engine(on, LIMITS, {}, [])
+  await start($)
   await start($, 'terminal')
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
   expect(opens).toEqual([])
+  expect(logs).toEqual([])
 })
 
-test('unasked open happens once per session; the command always opens', async ($, on) => {
-  const { opens } = engine(on, LIMITS)
-  await start($)
-  await start($)
-  await start($)
-  expect(opens).toEqual(['usage-hud'])
-  await $.command.run({
-    command: 'usage-hud', args: '', origin: { kind: 'composer' },
-    presentation: { isFullscreen: true, columns: 120 },
-  })
-  expect(opens).toEqual(['usage-hud', 'usage-hud'])
-})
-
-test('/usage-hud answers text and opens the pane', async ($, on) => {
+test('/usage-hud answers text and does not open a pane', async ($, on) => {
   const { opens } = engine(on, [])
   await start($)
   await measure($)
-  const r = await $.command.run({
-    command: 'usage-hud', args: '', origin: { kind: 'composer' },
-    presentation: { isFullscreen: true, columns: 120 },
-  })
+  const r = await runCommand($)
   expect(r.text).toContain('5-hour: 72% left, resets in 2h 14m')
   expect(r.text).toContain('7-day: 40% left')
   expect(r.text).toContain('Cache: cold')
   expect(r.text).toContain('Cache state is an estimate.')
-  expect(opens).toEqual(['usage-hud', 'usage-hud'])
+  expect(/pane|engine/i.test(r.text)).toBe(false)
+  for (const isFullscreen of [true, false]) {
+    await $.command.run({
+      command: 'usage-hud', args: '', origin: { kind: 'composer' },
+      presentation: { isFullscreen, columns: isFullscreen ? 120 : 40 },
+    })
+  }
+  expect(opens).toEqual([])
 })
 
 // ---- safety ----
@@ -941,8 +903,12 @@ const countAttach = (on: On) => {
 const ART_LOOKS = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono'] as const
 
 for (const theme of ART_LOOKS) {
-  kitTest(`${theme}: desktop band and pane draw Svg with the readout as alt`, { options: { theme } }, async ($, on) => {
+  kitTest(`${theme}: the desktop band draws Svg with the readout as alt`, { options: { theme } }, async ($, on) => {
     engine(on, [])
+    on('ui.render', ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return <Text>engine</Text>
+    })
     await start($)
     await measure($)
     const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
@@ -955,11 +921,10 @@ for (const theme of ART_LOOKS) {
     )
     expect(await b.find({ type: 'Text' })).toBe(undefined)
     await b.unmount()
+    // No pane: a Pane render is not the mod's, so it draws no Svg and the engine answers.
     const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
-    const ps = await p.find({ type: 'Svg' })
-    expect(ps?.props.width).toBe(320)
-    expect(String(ps?.props.source)).toContain('tested on 2.1.316')
-    expect(String(ps?.props.alt)).toContain('5-hour: 72% left')
+    expect(await p.find({ type: 'Svg' })).toBe(undefined)
+    expect((await p.find({ type: 'Text' }))?.text).toBe('engine')
     await p.unmount()
   })
 
@@ -971,9 +936,6 @@ for (const theme of ART_LOOKS) {
     expect(await shown(b)).toBe(WIDE)
     expect(await b.find({ type: 'Svg' })).toBe(undefined)
     await b.unmount()
-    const p = await $.ui.mount({ ...pane('dock'), surface: 'terminal' })
-    expect((await rowsOf(p))[0]).toBe('5-hour')
-    await p.unmount()
   })
 }
 
@@ -1014,9 +976,6 @@ kitTest('a saved theme of christmas (removed in 0.4.0) falls back to the default
   expect(src).toContain(CLEAN_ID)
   for (const c of ['snowflake', 'holly', 'ornament', 'stripes']) expect(src.includes(c)).toBe(false)
   await b.unmount()
-  const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
-  expect(String((await p.find({ type: 'Svg' }))?.props.source)).toContain('id="uhndpP"')
-  await p.unmount()
   // The terminal still draws text.
   const t = await $.ui.mount({ ...band(80), surface: 'terminal' })
   expect(await t.find({ type: 'Svg' })).toBe(undefined)
@@ -1097,54 +1056,76 @@ kitTest('with a terminal attached, an SVG theme keeps the text second ticks', as
   expect(ticks() - before).toBeGreaterThan(30)
 })
 
-kitTest('session.attach opens the pane once when start could not, and redraws', async ($, on) => {
+kitTest('session.attach redraws and never opens a pane (desktop, terminal, phone)', async ($, on) => {
   const surfaces: ('desktop' | 'terminal')[] = []
-  const { opens, ticks } = engine(on, LIMITS, {}, surfaces)
+  const { opens, ticks, logs } = engine(on, LIMITS, {}, surfaces)
   const attached = countAttach(on)
   await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  surfaces.push('desktop', 'terminal')
+  let n = 0
+  const redraws = async (go: () => Promise<unknown>) => {
+    const before = ticks()
+    await go()
+    n += 1
+    expect(ticks()).toBeGreaterThan(before)
+    expect(attached()).toBe(n)
+  }
+  // Desktop, fullscreen or not, with or without a viewport.
+  await redraws(() => attach($, 'desktop'))
+  await redraws(() => attach($, 'desktop', 'desktop:2'))
+  await redraws(() => $.session.attach({ surface: 'desktop', clientId: 'd1', viewport: { columns: 64, rows: 40, isFullscreen: true } }))
+  await redraws(() => $.session.attach({ surface: 'desktop', clientId: 'd2', viewport: { columns: 64, rows: 40, isFullscreen: false } }))
+  // Terminal, fullscreen or not.
+  await redraws(() => attach($, 'terminal'))
+  await redraws(() => $.session.attach({ surface: 'terminal', clientId: 'terminal:fs', viewport: { columns: 80, rows: 24, isFullscreen: true } }))
+  // Phone, fullscreen or not.
+  await redraws(() => attach($, 'mobile'))
+  await redraws(() => $.session.attach({ surface: 'mobile', clientId: 'mobile:1', viewport: { columns: 40, rows: 60, isFullscreen: false } }))
+  await redraws(() => $.session.attach({ surface: 'mobile', clientId: 'mobile:2', viewport: { columns: 40, rows: 60, isFullscreen: true } }))
   expect(opens).toEqual([])
-  const before = ticks()
-  surfaces.push('desktop')
-  await attach($, 'desktop')
-  expect(opens).toEqual(['usage-hud'])
-  expect(ticks()).toBeGreaterThan(before)
-  await attach($, 'mobile')
-  await attach($, 'desktop', 'desktop:2')
-  expect(opens).toEqual(['usage-hud'])
-  expect(attached()).toBe(3)
+  expect(logs).toEqual([])
 })
 
-kitTest('session.attach after the start open does not open again; terminal attach never opens', async ($, on) => {
-  const { opens } = engine(on, LIMITS)
-  const attached = countAttach(on)
-  await start($)
-  expect(opens).toEqual(['usage-hud'])
-  await attach($, 'desktop')
-  expect(opens).toEqual(['usage-hud'])
-  expect(attached()).toBe(1)
-
-})
-
-kitTest('session.attach on a terminal surface does not open', async ($, on) => {
-  const { opens } = engine(on, LIMITS, {}, [])
+kitTest('session.attach with no surface listed does not open and logs nothing', async ($, on) => {
+  const { opens, logs } = engine(on, LIMITS, {}, [])
   const attached = countAttach(on)
   await $.session.start({ cwd: '/', surface: null, isInteractive: false })
   await attach($, 'terminal')
+  await attach($, 'desktop')
   expect(opens).toEqual([])
-  expect(attached()).toBe(1)
+  expect(logs).toEqual([])
+  expect(attached()).toBe(2)
 })
 
 kitTest('session.attach: own work failing still reaches the engine once', async ($, on) => {
-  const { opens, fail, logs } = engine(on, LIMITS, {}, [])
+  let down = false
+  const logs: string[] = []
+  const opens: string[] = []
+  on('clock.now', () => {
+    if (down) throw new TypeError('clock')
+    return { value: NOW }
+  })
+  on('clock.after', () => new Promise<any>(() => {}))
+  on('store.get', () => ({ value: undefined }))
+  on('store.set', () => ({ value: undefined }))
+  on('session.usage', () => ({ value: { startedAt: NOW, context: { window: 200000 }, rateLimits: LIMITS } }))
+  on('session.surfaces', () => ({ value: ['desktop'] }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.open', (_, e) => {
+    opens.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.log', (_, e) => { logs.push(e.text); return { value: undefined } })
+  on('command.register', () => ({ value: { command: 'usage-hud' } }))
   const attached = countAttach(on)
   await $.session.start({ cwd: '/', surface: null, isInteractive: false })
-  fail.open = true
+  down = true
   const r = await attach($, 'desktop')
   expect(r.clientId).toBe('desktop:default')
   expect(attached()).toBe(1)
   expect(opens).toEqual([])
   expect(logs.length).toBe(1)
-  expect(/^usage-hud: session.attach pane open failed: \w+$/.test(logs[0] ?? '')).toBe(true)
+  expect(/^usage-hud: session.attach schedule failed: \w+$/.test(logs[0] ?? '')).toBe(true)
 })
 
 kitTest('no surfaces and no client start: no open, no error line; /usage-hud still answers text', async ($, on) => {
@@ -1159,26 +1140,7 @@ kitTest('no surfaces and no client start: no open, no error line; /usage-hud sti
   })
   expect(r.text).toContain('5-hour: 72% left, resets in 2h 14m')
   expect(r.text).toContain('Cache state is an estimate.')
-})
-
-kitTest('a phone attach (isFullscreen false or unknown) never opens the pane unasked', async ($, on) => {
-  const surfaces: ('desktop' | 'terminal')[] = []
-  const { opens } = engine(on, LIMITS, {}, surfaces)
-  countAttach(on)
-  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
-  surfaces.push('desktop')
-  await $.session.attach({ surface: 'mobile', clientId: 'mobile:1', viewport: { columns: 40, rows: 60, isFullscreen: false } })
-  await attach($, 'mobile', 'mobile:2')
   expect(opens).toEqual([])
-})
-
-kitTest('a desktop app start with no start surface opens once the surface is listed', async ($, on) => {
-  const { opens } = engine(on, LIMITS)
-  countAttach(on)
-  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
-  expect(opens).toEqual(['usage-hud'])
-  await attach($, 'desktop')
-  expect(opens).toEqual(['usage-hud'])
 })
 
 // ---- REVIEW 0.3 adversarial ----
@@ -1199,50 +1161,17 @@ for (const bad of ['neon', 'TEXT', 'Christmas', 'christmas', 'Clean', '', 42, ['
   })
 }
 
-kitTest('R5 text theme on the desktop draws the pane exactly as on the terminal', { options: { theme: 'text' } }, async ($, on) => {
+kitTest('R5 text theme on the desktop draws the band exactly as on the terminal', { options: { theme: 'text' } }, async ($, on) => {
   engine(on, LIMITS)
   await start($)
   await measure($)
-  for (const [pl, c] of [['dock', 64], ['dock', 20], ['inline', 40], ['inline', 99]] as const) {
-    const d = await $.ui.mount({ ...pane(pl, c), surface: 'desktop' })
-    const t = await $.ui.mount({ ...pane(pl, c), surface: 'terminal' })
-    expect(await rowsOf(d)).toEqual(await rowsOf(t))
-    expect(await d.find({ type: 'Svg' })).toBe(undefined)
-    await d.unmount(); await t.unmount()
-  }
   for (const c of [6, 12, 25, 40, 80, 99, 200]) {
     const d = await $.ui.mount({ ...band(c), surface: 'desktop' })
     const t = await $.ui.mount({ ...band(c), surface: 'terminal' })
     expect(await shown(d)).toBe(await shown(t))
+    expect(await d.find({ type: 'Svg' })).toBe(undefined)
     await d.unmount(); await t.unmount()
   }
-})
-
-kitTest('R6 terminal attach with isFullscreen true never opens unasked', async ($, on) => {
-  const surfaces: ('desktop' | 'terminal')[] = []
-  const { opens } = engine(on, LIMITS, {}, surfaces)
-  countAttach(on)
-  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
-  surfaces.push('terminal')
-  await $.session.attach({ surface: 'terminal', clientId: 'terminal:default', viewport: { columns: 80, rows: 24, isFullscreen: true } })
-  expect(opens).toEqual([])
-})
-
-kitTest('R7 a start on the mobile surface does not open unasked', async ($, on) => {
-  const { opens } = engine(on, LIMITS, {}, ['mobile' as any])
-  await $.session.start({ cwd: '/', surface: 'mobile', isInteractive: true })
-  expect(opens).toEqual([])
-})
-
-kitTest('R9 desktop attach with isFullscreen false never opens', async ($, on) => {
-  const surfaces: ('desktop' | 'terminal')[] = []
-  const { opens } = engine(on, LIMITS, {}, surfaces)
-  countAttach(on)
-  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
-  surfaces.push('desktop')
-  await $.session.attach({ surface: 'desktop', clientId: 'd1', viewport: { columns: 64, rows: 40, isFullscreen: false } })
-  await $.session.attach({ surface: 'mobile', clientId: 'm1', viewport: { columns: 40, rows: 40, isFullscreen: false } })
-  expect(opens).toEqual([])
 })
 
 kitTest('R11 text theme cadence unchanged: seconds under 10 min of cache', { options: { theme: 'text' } }, async ($, on) => {
@@ -1267,11 +1196,9 @@ kitTest('R1 render with a throwing clock falls back to next(e) on the Svg path',
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
   on('session.usage', () => ({ value: { startedAt: NOW, context: { window: 200000 }, rateLimits: LIMITS } }))
-  on('session.version', () => ({ value: { version: '2.1.316' } }))
   on('session.surfaces', () => ({ value: ['desktop'] }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.measure', (_, e) => ({ changed: [...e.changed] }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.log', (_, e) => { logs.push(e.text); return { value: undefined } })
   on('command.register', () => ({ value: { command: 'usage-hud' } }))
   on('ui.render', ($, e) => {
@@ -1289,9 +1216,6 @@ kitTest('R1 render with a throwing clock falls back to next(e) on the Svg path',
   expect(await b.find({ type: 'Svg' })).toBe(undefined)
   expect((await b.find({ type: 'Text' }))?.text).toBe('engine')
   await b.unmount()
-  const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
-  expect((await p.find({ type: 'Text' }))?.text).toBe('engine')
-  await p.unmount()
 })
 
 for (const theme of [...ART_LOOKS, 'text'] as const) {
@@ -1309,11 +1233,9 @@ for (const theme of [...ART_LOOKS, 'text'] as const) {
     await step($)
     counting = true
     const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
-    const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
-    await p.unmount()
-    const i = await $.ui.mount({ ...pane('inline', 40), surface: 'desktop' })
+    const t = await $.ui.mount({ ...band(40), surface: 'terminal' })
     expect(writes).toBe(0)
-    await b.unmount(); await i.unmount()
+    await b.unmount(); await t.unmount()
   })
 }
 
