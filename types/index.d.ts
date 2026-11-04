@@ -28,8 +28,6 @@ declare module 'claude-code' {
       model: string | null
       ttlLearned: Ttl | null
       tick: number
-      /** The unasked pane open at session.start already ran in this session. */
-      opened: boolean
     }
   }
 }

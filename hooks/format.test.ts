@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { CacheView, View, ViewInput, WindowView } from './data'
 import { computeView, nextWake } from './data'
-import { bandSegments, bar, commandText, formatClock, formatDuration, formatLeft, paneLines, type Seg } from './format'
+import { bandSegments, bar, commandText, formatClock, formatDuration, formatLeft, type Seg } from './format'
 
 const M = 60_000
 const H = 60 * M
@@ -109,10 +109,6 @@ test('bar fill tones follow the percent thresholds', () => {
   expect(fills(bandSegments(base({ fiveHour: win('5h', 0, H, { exceeded: true }) }), 99)).length).toBe(2)
   const ro = bandSegments(base({ fiveHour: win('5h', 72, null, { state: 'rolled', ageMs: 3 * H }) }), 99)
   expect(show(ro).startsWith('5h ---------- reset  |')).toBe(true)
-  // Pane bars use the same tones.
-  const pl = paneLines(base({ fiveHour: win('5h', 19, H), sevenDay: win('7d', 51, H) }), 64, { tested: 'a', actual: 'a' })
-  expect(bars(pl[1] ?? [])[0]?.tone).toBe('error')
-  expect(bars(pl[4] ?? [])[0]?.tone).toBe('success')
 })
 
 // ---- band ----
@@ -248,14 +244,10 @@ test('cache bar drains with time and is empty once cold', () => {
   // 5m TTL: the fraction is of 5 minutes.
   expect(show(bandSegments(base({ cache: hot(150_000), ttl: '5m' }), 99)).endsWith('Cache #####----- hot 02:30')).toBe(true)
   expect(show(bandSegments(base({ cache: hot(150_000), ttl: '1h' }), 99)).endsWith('Cache #--------- hot 02:30')).toBe(true)
-  // Cold, any reason: no fill cell anywhere in the cache bar, band or pane.
+  // Cold, any reason: no fill cell anywhere in the cache bar.
   for (const reason of ['new', 'expired', 'compacted', 'cleared', 'resume-expired', 'model'] as const) {
     const c: CacheView = { state: 'cold', reason }
     expect(cacheCells(base({ cache: c }))).toBe('----------')
-    const pl = paneLines(base({ cache: c }), 64, { tested: 'a', actual: 'a' })
-    const row = pl.find(l => text(l).endsWith(' cold')) ?? []
-    expect(bars(row).length).toBe(1)
-    expect(fills(row)).toEqual([])
   }
 })
 
@@ -317,116 +309,6 @@ test('rolled and resetting windows', () => {
   expect(show(bandSegments(n, 99))).toBe('5h #######--- 72%  |  7d ####------ 40% 3d 4h  |  Cache #######--- hot 41m')
 })
 
-const VER = { tested: '2.1.316', actual: '2.1.316' }
-
-test('pane lines at 64 columns', () => {
-  expect(shows(paneLines(base(), 64, VER))).toEqual([
-    '5-hour',
-    '  #################------- 72% left',
-    '  resets in 2h 14m',
-    '7-day',
-    '  ##########-------------- 40% left',
-    '  resets in 3d 4h',
-    'Cache (estimate)',
-    '  ################-------- hot 41m',
-    'tested on 2.1.316',
-  ])
-  const pl = paneLines(base(), 64, VER)
-  expect(toneOf(pl[1] ?? [], '72%')).toBe('normal')
-  expect(toneOf(pl[4] ?? [], '40%')).toBe('warning')
-  expect(toneOf(pl[7] ?? [], 'hot 41m')).toBe('success')
-  expect(toneOf(pl[0] ?? [], '5-hour')).toBe('dim')
-  expect(bars(pl[1] ?? []).map(s => s.tone)).toEqual(['success', 'track'])
-  expect(bars(pl[4] ?? []).map(s => s.tone)).toEqual(['warning', 'track'])
-  expect(bars(pl[7] ?? []).map(s => s.tone)).toEqual(['success', 'track'])
-})
-
-test('pane bar width: 24 cells at 64 columns, 17 at 30, 13 at 26', () => {
-  const cells = (cols: number) =>
-    paneLines(base(), cols, VER).filter(l => bars(l).length > 0).map(l => text(bars(l)).length)
-  expect(cells(64)).toEqual([24, 24, 24])
-  expect(cells(37)).toEqual([24, 24, 24])
-  expect(cells(36)).toEqual([23, 23, 23])
-  expect(cells(30)).toEqual([17, 17, 17])
-  expect(cells(26)).toEqual([13, 13, 13])
-  // Under 26: compact lines, no bars.
-  expect(cells(25)).toEqual([])
-  expect(shows(paneLines(base(), 30, VER)).slice(0, 2)).toEqual(['5-hour', '  ############----- 72% left'])
-  expect(shows(paneLines(base(), 26, VER)).slice(0, 2)).toEqual(['5-hour', '  #########---- 72% left'])
-  // Widest bar line at 26 columns still fits: 100% left.
-  const full = paneLines(base({ fiveHour: win('5h', 100, H) }), 26, VER)
-  expect(show(full[1] ?? [])).toBe('  ############# 100% left')
-  expect(text(full[1] ?? []).length).toBe(25)
-})
-
-test('pane shows cold reasons, none, na and stale', () => {
-  const reasons = {
-    new: 'new', expired: 'expired', compacted: 'compacted', cleared: 'cleared',
-    'resume-expired': 'expired on resume', model: 'model changed',
-  } as const
-  for (const [reason, label] of Object.entries(reasons)) {
-    const pl = paneLines(base({ cache: { state: 'cold', reason: reason as keyof typeof reasons } }), 64, VER)
-    const ls = shows(pl)
-    expect(ls.slice(6, 9)).toEqual(['Cache (estimate)', '  ------------------------ cold', `  (${label})`])
-    expect(toneOf(pl[8] ?? [], `  (${label})`)).toBe('dim')
-    expect(toneOf(pl[7] ?? [], 'cold')).toBe('dim')
-  }
-  const none = base({ fiveHour: { label: '5h', state: 'none' }, sevenDay: { label: '7d', state: 'none' } })
-  expect(shows(paneLines(none, 64, VER)).slice(0, 4)).toEqual(['5-hour', '  --', '7-day', '  --'])
-  const na = base({ fiveHour: { label: '5h', state: 'na' }, sevenDay: { label: '7d', state: 'na' } })
-  expect(shows(paneLines(na, 64, VER)).slice(0, 2)).toEqual(['Limits', '  n/a'])
-  const st = base({ fiveHour: win('5h', 72, H, { state: 'stale', ageMs: 5 * M }) })
-  const stl = paneLines(st, 64, VER)
-  expect(shows(stl).slice(0, 4)).toEqual(['5-hour', '  #################------- 72% left', '  resets in 1h 0m', '  as of 5m ago'])
-  expect(bars(stl[1] ?? []).map(s => s.tone)).toEqual(['dim', 'track'])
-  const ro = base({ fiveHour: win('5h', 72, null, { state: 'rolled', ageMs: 3 * H }) })
-  expect(shows(paneLines(ro, 64, VER)).slice(0, 4)).toEqual(['5-hour', '  ------------------------ reset', '  as of 3h 0m ago', '7-day'])
-})
-
-test('pane under 26 columns uses one line per readout (F10)', () => {
-  expect(lines(paneLines(base(), 25, VER))).toEqual([
-    '5h 72% 2h14m',
-    '7d 40% 3d4h',
-    'Cache hot 41m',
-    'tested on 2.1.316',
-  ])
-  const na = base({ fiveHour: { label: '5h', state: 'na' }, sevenDay: { label: '7d', state: 'na' }, cache: { state: 'cold', reason: 'new' } })
-  expect(lines(paneLines(na, 18, VER))).toEqual(['Limits n/a', 'Cache cold', 'tested on 2.1.316'])
-  // 26 is already the block layout.
-  expect(lines(paneLines(base(), 26, VER))[0]).toBe('5-hour')
-  // Narrower lines pick a shorter form before cutting.
-  expect(lines(paneLines(base(), 11, VER)).slice(0, 3)).toEqual(['5h 72% 2h', '7d 40% 3d4h', 'hot 41m'])
-})
-
-test('no pane line wider than the pane (F10)', () => {
-  const views = [
-    base(),
-    base({
-      fiveHour: win('5h', 1, 999 * D, { state: 'stale', ageMs: 999 * D }), sevenDay: win('7d', 1, null, { state: 'stale', ageMs: 999 * D }),
-      cache: { state: 'cold', reason: 'resume-expired' },
-    }),
-    base({ cache: { state: 'cold', reason: 'model' } }),
-    base({ fiveHour: win('5h', 100, 999 * D), sevenDay: win('7d', 0, 999 * D, { exceeded: true }), cache: hot(H) }),
-    base({ fiveHour: win('5h', 100, null, { state: 'rolled', ageMs: 999 * D }), cache: hot(9 * M + 59_000) }),
-  ]
-  for (const v of views) for (let c = 0; c <= 120; c++) {
-    for (const l of paneLines(v, c, { tested: '2.1.316', actual: '2.1.317-nightly.20261101' })) {
-      expect(text(l).length).toBeLessThanOrEqual(c)
-    }
-  }
-})
-
-test('pane footer notes an untested engine', () => {
-  const ls = paneLines(base(), 64, { tested: '2.1.316', actual: '2.1.320' })
-  const last = ls[ls.length - 1] ?? []
-  expect(text(last)).toBe('tested on 2.1.316 (untested engine 2.1.320)')
-  expect(toneOf(last, '(untested engine 2.1.320)')).toBe('warning')
-  expect(lines(paneLines(base(), 64, { tested: '2.1.316', actual: null })).pop()).toBe('tested on 2.1.316')
-  // Narrow: the note moves to its own line.
-  expect(lines(paneLines(base(), 26, { tested: '2.1.316', actual: '2.1.320' })).slice(-2))
-    .toEqual(['tested on 2.1.316', '(untested engine 2.1.320)'])
-})
-
 test('commandText gives three lines and the estimate note', () => {
   expect(commandText(base())).toBe([
     '5-hour: 72% left, resets in 2h 14m',
@@ -469,7 +351,7 @@ test('numbers carry the tabular mark (F15)', () => {
 })
 
 test('all output is plain ASCII', () => {
-  const all = [text(bandSegments(base(), 99)), ...lines(paneLines(base(), 64, { tested: 'a', actual: 'b' })), commandText(base())].join('')
+  const all = [text(bandSegments(base(), 99)), commandText(base())].join('')
   expect(/^[\x20-\x7e\n]*$/.test(all)).toBe(true)
 })
 
@@ -514,19 +396,6 @@ test('ADV far-future resets stay inside the chosen width', () => {
   ] } }))
   for (const cols of [6, 14, 20, 28, 38, 56, 76, 99, 500]) {
     expect(text(bandSegments(v, cols)).length).toBeLessThanOrEqual(cols)
-  }
-})
-
-test('ADV docked pane at 10, 22 and 25 columns: no line wider than the pane', () => {
-  const v = computeView(vin({
-    limits: { observedAt: NOW - 999 * D, items: [{ kind: 'five_hour', percentUsed: 1, resetsAt: iso(NOW + 999 * D) }, { kind: 'seven_day', percentUsed: 1 }] },
-    live: false, turnDone: false,
-    cache: { model: 'm', at: NOW, inputTokens: 0, coldReason: 'resume-expired' },
-  }))
-  for (const cols of [10, 22, 25]) {
-    for (const l of paneLines(v, cols, { tested: '2.1.316', actual: '2.1.317-nightly.20261101' })) {
-      expect(text(l).length).toBeLessThanOrEqual(cols)
-    }
   }
 })
 
