@@ -3,7 +3,7 @@ import type { Engine, TestBody, TestOptions } from 'claude-code/testing'
 import type { On, SessionUsage } from 'claude-code'
 
 // The tests below written for the text look run with theme 'text' unless they say
-// otherwise; the art tests at the end use kitTest with the manifest default (clean).
+// otherwise; the art tests at the end use kitTest with the manifest default (terminal).
 function test(name: string, a: TestOptions | TestBody, b?: TestBody): void {
   if (typeof a === 'function') kitTest(name, { options: { theme: 'text' } }, a)
   else kitTest(name, { ...a, options: { theme: 'text', ...a.options } }, b!)
@@ -941,13 +941,15 @@ for (const theme of ART_LOOKS) {
 
 // The clean look's svg ids start with uhn (band, dark: uhndb); any other look's differ.
 const CLEAN_ID = 'id="uhndbP"'
+// The default look is terminal (ids start with uht).
+const DEFAULT_ID = 'id="uhtdbP"'
 
-kitTest('the manifest default is clean', async ($, on) => {
+kitTest('the manifest default is terminal', async ($, on) => {
   engine(on, [])
   await start($)
   const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
   const src = String((await b.find({ type: 'Svg' }))?.props.source)
-  expect(src).toContain(CLEAN_ID)
+  expect(src).toContain(DEFAULT_ID)
   await b.unmount()
 })
 
@@ -967,13 +969,13 @@ kitTest('explicit theme clean draws Svg on the desktop and Text on the terminal'
   await t.unmount()
 })
 
-kitTest('a saved theme of christmas (removed in 0.4.0) falls back to the default clean look', { options: { theme: 'christmas' as any } }, async ($, on) => {
+kitTest('a saved theme of christmas (removed in 0.4.0) falls back to the default terminal look', { options: { theme: 'christmas' as any } }, async ($, on) => {
   engine(on, LIMITS, {}, ['desktop', 'terminal'])
   await start($)
   await measure($)
   const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
   const src = String((await b.find({ type: 'Svg' }))?.props.source)
-  expect(src).toContain(CLEAN_ID)
+  expect(src).toContain(DEFAULT_ID)
   for (const c of ['snowflake', 'holly', 'ornament', 'stripes']) expect(src.includes(c)).toBe(false)
   await b.unmount()
   // The terminal still draws text.
@@ -1146,7 +1148,7 @@ kitTest('no surfaces and no client start: no open, no error line; /usage-hud sti
 // ---- REVIEW 0.3 adversarial ----
 
 for (const bad of ['neon', 'TEXT', 'Christmas', 'christmas', 'Clean', '', 42, ['text']] as unknown[]) {
-  kitTest(`R4 invalid theme ${JSON.stringify(bad)} falls back to clean`, { options: { theme: bad as any } }, async ($, on) => {
+  kitTest(`R4 invalid theme ${JSON.stringify(bad)} falls back to terminal`, { options: { theme: bad as any } }, async ($, on) => {
     engine(on, LIMITS)
     await start($)
     await measure($)
@@ -1156,7 +1158,7 @@ for (const bad of ['neon', 'TEXT', 'Christmas', 'christmas', 'Clean', '', 42, ['
     expect(await b.find({ type: 'Text' })).toBe(undefined)
     const src = String(svg?.props.source)
     expect(src.startsWith('<svg ')).toBe(true)
-    expect(src).toContain(CLEAN_ID)
+    expect(src).toContain(DEFAULT_ID)
     await b.unmount()
   })
 }

@@ -22,18 +22,18 @@
     "theme": {
       "type": "string",
       "title": "Look",
-      "description": "clean is the default minimal look drawn in the desktop app, mobile and VS Code; classic is the older neutral card; midnight, paper, terminal, sunset and mono are alternative looks; text draws text everywhere. The terminal always draws text.",
+      "description": "terminal is the default look (monospace phosphor strip) drawn in the desktop app, mobile and VS Code; clean is a minimal card; classic is the older neutral card; midnight, paper, sunset and mono are alternative looks; text draws text everywhere. The terminal app always draws text.",
       "options": [
+        "terminal",
         "clean",
         "classic",
         "midnight",
         "paper",
-        "terminal",
         "sunset",
         "mono",
         "text"
       ],
-      "default": "clean"
+      "default": "terminal"
     }
   },
   "repository": "https://github.com/luckyajinn/usage-hud",

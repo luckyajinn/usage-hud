@@ -18,20 +18,20 @@ Bars are green above 50% left, amber from 20% to 50%, red under 20%. Readings ol
 
 Option `theme`:
 
-- `clean` (default): in the desktop app, mobile and VS Code the strip is drawn as a minimal card: a quiet dark panel with a large percent-left number for each limit, a thin solid bar (green above 50% left, amber from 20% to 50%, red under 20%) and a small status dot beside each label. No decoration.
+- `terminal` (default): a monospace phosphor strip: a near-black panel with faint scanlines, prompt-style labels (`5h>`, `7d>`, `cache>`) and bars made of blocks like `[#######---]`; green above 50% left, amber from 20% to 50%, red under 20%.
+- `clean`: a minimal card: a quiet dark panel with a large percent-left number for each limit, a thin solid bar and a small status dot beside each label. No decoration.
 - `classic`: the older neutral card with solid green, amber and red bars.
 - `midnight`: deep navy glass with a neon accent.
-- `paper`: a warm light editorial card.
-- `terminal`: monospace phosphor retro.
-- `sunset`: warm gradient bars.
-- `mono`: ultra-minimal monochrome lines.
+- `paper`: a warm editorial card with serif numerals and ruled-scale bars.
+- `sunset`: warm gradient bars on a plum-to-indigo card.
+- `mono`: ultra-minimal monochrome, a marker on a hairline instead of a bar.
 - `text`: the text look shown above, everywhere.
 
 The terminal always draws the text look. The strip is drawn in dark colours (the app does not tell a mod whether it is in light or dark mode). It shows whole minutes and redraws at most once a minute; only the text look counts down seconds in the last 10 minutes of the cache.
 
 Set it with `/plugin configure usage-hud@cj-mods` in a terminal session.
 
-Changed in 0.4.0: the default look changed from `christmas` to `clean`, and the festive `christmas` look was removed. A saved value of `christmas` now falls back to the default look (`clean`). The docked pane was removed too: the mod now shows only the strip above the message box, and `/usage-hud` only prints the readout as text.
+Changed in 0.4.0: the default look changed from `christmas` to `terminal`, and the festive `christmas` look was removed. A saved value of `christmas` now falls back to the default look (`terminal`). The docked pane was removed too: the mod now shows only the strip above the message box, and `/usage-hud` only prints the readout as text.
 
 ## Install
 

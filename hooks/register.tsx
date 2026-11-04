@@ -54,7 +54,7 @@ function toSnap(v: unknown): LimitsSnap | null {
 
 // Process-local facts (not in PluginState): a reload starts them over.
 let setting: TtlSetting = 'auto'
-let theme: Theme = 'clean'
+let theme: Theme = 'terminal'
 let turnDone = false
 let timer: Timer | null = null
 
@@ -126,7 +126,7 @@ async function learnTtl($: $T, t: Ttl | null): Promise<void> {
 
 export const register: Register = (on, options) => {
   setting = isSetting(options.cacheTtl) ? options.cacheTtl : 'auto'
-  theme = isTheme(options.theme) ? options.theme : 'clean'
+  theme = isTheme(options.theme) ? options.theme : 'terminal'
   turnDone = false
   timer?.cancel()
   timer = null
