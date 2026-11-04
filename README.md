@@ -12,7 +12,7 @@ It draws a one-line strip above the message box. Type `/usage-hud` to print the 
 5h [##########] 98% 2h 56m  |  7d [##########] 100% 6d 23h  |  Cache [#########-] hot 52m
 ```
 
-Bars are green above 50% left, amber from 20% to 50%, red under 20%. Readings older than 10 minutes are dimmed with "as of".
+Bars are green above 50% left, amber from 20% to 50%, red under 20%. Readings older than 10 minutes are dimmed.
 
 ## Look
 

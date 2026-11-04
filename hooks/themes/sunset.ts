@@ -126,8 +126,7 @@ const DOT_MIN_W = 104
 
 /**
  * One band block: sun dot, small label, heavy value, then the muted tail at the right.
- * Same priorities as the clean look: the label beats the dot and the hero's size; a stale
- * reading keeps its "as of" note whenever it fits.
+ * Same priorities as the clean look: the label beats the dot and the hero's size.
  */
 function bandBlock(x: number, w: number, r: Readout, p: Palette, id: string, compact: boolean, isCache: boolean): string {
   const size = compact ? 17 : 20

@@ -129,7 +129,7 @@ function bandReset(w: Reading, tier: Tier): Seg[] {
   return []
 }
 
-function bandWindow(w: WindowView, tier: Tier, age: boolean): Seg[] {
+function bandWindow(w: WindowView, tier: Tier): Seg[] {
   const label: Seg[] = tier === 5 ? [] : [dim(w.label + ' ')]
   if (w.state === 'none') return [...label, dim('--')]
   if (w.state === 'na') return [...label, dim('n/a')]
@@ -138,7 +138,6 @@ function bandWindow(w: WindowView, tier: Tier, age: boolean): Seg[] {
   const out: Seg[] = [...label, num(`${w.percentLeft}%`, percentTone(w))]
   if (tier <= 2) out.push(dim(' left'))
   out.push(...bandReset(w, tier))
-  if (age && w.state === 'stale') out.push(dim(', as of ' + formatDuration(w.ageMs)))
   return out
 }
 
@@ -151,13 +150,13 @@ function bandCache(c: CacheView, tier: Tier): Seg[] {
   return [seg('hot', tone)]
 }
 
-function bandTier(v: View, tier: Tier, age: boolean): Seg[] {
+function bandTier(v: View, tier: Tier): Seg[] {
   const sep = dim(tier === 1 ? '  |  ' : tier === 5 ? ' ' : ' | ')
   const parts: Seg[][] = []
   if (v.fiveHour.state === 'na' && v.sevenDay.state === 'na') {
     parts.push([dim(tier === 5 ? 'n/a' : 'Limits n/a')])
   } else {
-    parts.push(bandWindow(v.fiveHour, tier, age), bandWindow(v.sevenDay, tier, age))
+    parts.push(bandWindow(v.fiveHour, tier), bandWindow(v.sevenDay, tier))
   }
   parts.push(bandCache(v.cache, tier))
   const out: Seg[] = []
@@ -169,7 +168,7 @@ function bandTier(v: View, tier: Tier, age: boolean): Seg[] {
 }
 
 /** Band row with bars: `5h [bar] 98% 2h 56m | 7d [bar] 100% 6d 23h | Cache [bar] hot 52m`. */
-function barWindow(w: WindowView, width: number, age: boolean): Seg[] {
+function barWindow(w: WindowView, width: number): Seg[] {
   const out: Seg[] = [dim(w.label + ' ')]
   if (w.state === 'none') return [...out, dim('--')]
   if (w.state === 'na') return [...out, dim('n/a')]
@@ -178,15 +177,14 @@ function barWindow(w: WindowView, width: number, age: boolean): Seg[] {
   out.push(dim(' '), num(`${w.percentLeft}%`, percentTone(w)))
   if (w.resetting) out.push(dim(' resetting'))
   else if (w.resetsInMs !== null) out.push(num(' ' + formatDuration(w.resetsInMs), 'dim'))
-  if (age && w.state === 'stale') out.push(dim(', as of ' + formatDuration(w.ageMs)))
   return out
 }
 
-function barTier(v: View, width: number, age: boolean): Seg[] {
+function barTier(v: View, width: number): Seg[] {
   const sep = dim('  |  ')
   const out: Seg[] = []
   if (v.fiveHour.state === 'na' && v.sevenDay.state === 'na') out.push(dim('Limits n/a'))
-  else out.push(...barWindow(v.fiveHour, width, age), sep, ...barWindow(v.sevenDay, width, age))
+  else out.push(...barWindow(v.fiveHour, width), sep, ...barWindow(v.sevenDay, width))
   out.push(sep, dim('Cache '), ...cacheBar(v.cache, v.ttl, width), dim(' '))
   if (v.cache.state === 'cold') out.push(dim('cold'))
   else out.push(num('hot ' + formatLeft(v.cache.leftMs), cacheTone(v.cache)))
@@ -214,14 +212,10 @@ export const BAND_MIN_COLUMNS = 6
 /** One band row: the first tier (widest first) that fits `columns`; never wider. */
 export function bandSegments(v: View, columns: number): Seg[] {
   if (!(columns >= BAND_MIN_COLUMNS)) return []
-  const anyStale = v.fiveHour.state === 'stale' || v.sevenDay.state === 'stale'
-  const candidates: Seg[][] = []
-  if (anyStale) candidates.push(barTier(v, 10, true))
-  candidates.push(barTier(v, 10, false), barTier(v, 6, false))
-  if (anyStale) candidates.push(bandTier(v, 1, true))
-  for (const t of [1, 2, 3, 4, 5] as const) candidates.push(bandTier(v, t, false))
+  const candidates: Seg[][] = [barTier(v, 10), barTier(v, 6)]
+  for (const t of [1, 2, 3, 4, 5] as const) candidates.push(bandTier(v, t))
   for (const c of candidates) if (textLength(c) <= columns) return c
-  return truncate(bandTier(v, 5, false), columns)
+  return truncate(bandTier(v, 5), columns)
 }
 
 // ---- command ----

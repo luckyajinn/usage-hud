@@ -88,7 +88,7 @@ test('every state renders its label in the band', () => {
     ok: ['72%', '2h 14m', '40%', 'hot 52m'],
     none: ['--'],
     na: ['Limits n/a'],
-    stale: ['88%', 'as of 12m'],
+    stale: ['88%'],
     rolled: ['reset'],
     exceeded: ['0%'],
     low: ['12%'],
@@ -304,15 +304,15 @@ test('clean: Limits n/a draws one wide quiet block in the band', () => {
   expect(words(cleanBandOf(one).source).includes('Limits n/a')).toBe(false)
 })
 
-test('clean: stale and rolled windows say when they were last read', () => {
+test('clean: stale and rolled windows are dimmed and never say "as of"', () => {
   const st = STATES.stale!
-  expect(words(cleanBandOf(st).source)).toContain('as of 12m')
   expect(words(cleanBandOf(st).source)).toContain('88%')
-  // A fresh reading never says "as of".
-  expect(words(cleanBandOf(base()).source).includes('as of')).toBe(false)
+  expect(words(cleanBandOf(st).source)).toContain('3h 0m')
+  expect(words(cleanBandOf(st).source).includes('as of')).toBe(false)
+  expect(cleanBandOf(st).source).toContain('opacity=".8"')
   const ro = STATES.rolled!
   expect(words(cleanBandOf(ro).source)).toContain('reset')
-  expect(words(cleanBandOf(ro).source)).toContain('as of 12m')
+  expect(words(cleanBandOf(ro).source).includes('as of')).toBe(false)
 })
 
 test('gradient ids are unique per theme and scheme, and every url() resolves', () => {
