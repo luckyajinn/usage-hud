@@ -1,10 +1,10 @@
-// SVG art for the christmas and classic themes. Pure: a View in, an SVG string out.
+// SVG art for the clean, classic and christmas themes. Pure: a View in, an SVG string out.
 // The render hook wraps the string in the surface's Svg element; the terminal draws text.
 import { ttlMs } from './data'
 import type { CacheView, View, WindowView } from './data'
 import { commandText, formatDuration } from './format'
 
-export type ArtTheme = 'christmas' | 'classic'
+export type ArtTheme = 'clean' | 'classic' | 'christmas'
 export type Art = { source: string; width: number; height: number }
 export type Version = { tested: string; actual: string | null }
 
@@ -76,8 +76,32 @@ const CLASSIC_LIGHT: Palette = {
   ornaments: ['#57606a', '#57606a', '#57606a'], leaf: '#1f883d', berry: '#cf222e',
 }
 
+// Clean reads only panel..lowText, frost and hotText; the festive fields (stripes, snow,
+// ornaments, leaf, berry, flake colours) exist to satisfy Palette and are never drawn.
+const CLEAN_DARK: Palette = {
+  panel: '#14161a', panel2: '#14161a', border: '#262a31', divider: '#23272e',
+  text: '#f1f3f5', muted: '#a0a7b1', faint: '#8d949e',
+  track: '#262a31', good: '#3dbb78', mid: '#e0a526', low: '#ef5b5b', stale: '#5a616b',
+  midText: '#e8b23a', lowText: '#ff7b7b',
+  frost: '#4cb8d4', hotText: '#6dc9e0', flakeHot: '#4cb8d4', flakeCold: '#6b727c',
+  stripeA: '#3dbb78', stripeB: '#3dbb78',
+  snow: '#ffffff', snowOpacity: 0,
+  ornaments: ['#a0a7b1', '#a0a7b1', '#a0a7b1'], leaf: '#3dbb78', berry: '#ef5b5b',
+}
+const CLEAN_LIGHT: Palette = {
+  panel: '#ffffff', panel2: '#ffffff', border: '#e3e6ea', divider: '#eceef1',
+  text: '#14161a', muted: '#4a525c', faint: '#5c646f',
+  track: '#e9ecef', good: '#17894f', mid: '#c27c00', low: '#d93a3a', stale: '#b4bac2',
+  midText: '#8a5a00', lowText: '#c42b2b',
+  frost: '#0f8aa3', hotText: '#0a6f86', flakeHot: '#0f8aa3', flakeCold: '#9aa1ab',
+  stripeA: '#17894f', stripeB: '#17894f',
+  snow: '#000000', snowOpacity: 0,
+  ornaments: ['#4a525c', '#4a525c', '#4a525c'], leaf: '#17894f', berry: '#d93a3a',
+}
+
 export function palette(theme: ArtTheme, dark: boolean): Palette {
   if (theme === 'christmas') return dark ? XMAS_DARK : XMAS_LIGHT
+  if (theme === 'clean') return dark ? CLEAN_DARK : CLEAN_LIGHT
   return dark ? CLASSIC_DARK : CLASSIC_LIGHT
 }
 
@@ -184,8 +208,13 @@ function cacheReadout(v: View, p: Palette): Readout {
  * borrow each other's gradients; drawings of one variant share identical defs.
  */
 type Kit = { theme: ArtTheme; id: string }
+// The letters are pinned by tests (christmas ids): do not change them.
+const KIT_TAG: Record<ArtTheme, string> = { christmas: 'x', clean: 'n', classic: 'c' }
 const kitOf = (theme: ArtTheme, dark: boolean, kind: 'b' | 'p'): Kit =>
-  ({ theme, id: 'uh' + (theme === 'christmas' ? 'x' : 'c') + (dark ? 'd' : 'l') + kind })
+  ({ theme, id: 'uh' + KIT_TAG[theme] + (dark ? 'd' : 'l') + kind })
+
+/** True when neither window has a subscription limit to show. */
+const limitsNa = (v: View): boolean => v.fiveHour.state === 'na' && v.sevenDay.state === 'na'
 
 function defs(p: Palette, k: Kit, h: number): string {
   let d = `<linearGradient id="${k.id}P" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.panel2}"/><stop offset="1" stop-color="${p.panel}"/></linearGradient>`
@@ -224,7 +253,7 @@ function pill(x: number, y: number, w: number, h: number, frac: number, f: Fill,
   return s
 }
 
-/** A bauble: cap, body and a glint. Classic draws a plain dot. */
+/** A bauble: cap, body and a glint. Anything but christmas draws a plain dot. */
 function ornament(cx: number, cy: number, r: number, color: string, p: Palette, k: Kit): string {
   if (k.theme !== 'christmas') return `<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.6)}" fill="${color}"/>`
   return `<g class="ornament"><rect x="${r1(cx - r * 0.38)}" y="${r1(cy - r * 1.32)}" width="${r1(r * 0.76)}" height="${r1(r * 0.5)}" rx="${r1(r * 0.12)}" fill="${p.border}"/>` +
@@ -232,7 +261,7 @@ function ornament(cx: number, cy: number, r: number, color: string, p: Palette, 
     `<circle cx="${r1(cx - r * 0.35)}" cy="${r1(cy - r * 0.35)}" r="${r1(r * 0.3)}" fill="#ffffff" opacity=".55"/></g>`
 }
 
-/** The cache glyph: a snowflake for christmas, a plain dot for classic. */
+/** The cache glyph: a snowflake for christmas, a plain dot for the other themes. */
 function cacheIcon(cx: number, cy: number, r: number, color: string, k: Kit): string {
   if (k.theme !== 'christmas') return `<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.5)}" fill="${color}"/>`
   return snowflake(cx, cy, r, color)
@@ -337,12 +366,13 @@ export function bandSvg(v: View, columns: number, theme: ArtTheme, dark: boolean
   const p = palette(theme, dark)
   const k = kitOf(theme, dark, 'b')
   const W = Math.max(60, Math.floor(Math.floor(columns) * BAND_CELL_PX))
+  if (theme === 'clean') return cleanBand(v, W, p, k)
   const H = BAND_H
   const pad = W < 420 ? 10 : 16
   const gap = W < 420 ? 14 : 28
   const compact = W < 560
   const inner = W - pad * 2
-  const na = v.fiveHour.state === 'na' && v.sevenDay.state === 'na'
+  const na = limitsNa(v)
   const cache = cacheReadout(v, p)
   const flake = (x: number) => cacheIcon(x + 6, 14, 5.5, v.cache.state === 'hot' ? p.flakeHot : p.flakeCold, k)
   let body = ''
@@ -376,6 +406,7 @@ export function paneSvg(v: View, columns: number, theme: ArtTheme, dark: boolean
   const p = palette(theme, dark)
   const k = kitOf(theme, dark, 'p')
   const W = Math.max(120, Math.floor(Math.floor(columns) * PANE_CELL_PX))
+  if (theme === 'clean') return cleanPane(v, W, p, k, version)
   const narrow = W < 360
   const pad = narrow ? 14 : 24
   const big = narrow ? 24 : 34
@@ -407,7 +438,7 @@ export function paneSvg(v: View, columns: number, theme: ArtTheme, dark: boolean
     y = ly + (narrow ? 20 : 28)
   }
 
-  const na = v.fiveHour.state === 'na' && v.sevenDay.state === 'na'
+  const na = limitsNa(v)
   if (na) {
     block({ ...windowReadout(v.fiveHour, p, theme), label: 'Limits' }, ornament(pad + 6, y + 7, 5, p.ornaments[0], p, k))
   } else {
@@ -433,4 +464,221 @@ export function paneSvg(v: View, columns: number, theme: ArtTheme, dark: boolean
   }
   const H = Math.ceil(y + (narrow ? 12 : 16))
   return { source: frame(W, H, p, k, body, barH, narrow ? 1 : 1.4), width: W, height: H }
+}
+
+// ---- clean theme ----
+// A quiet card: the number leads, labels are small muted caps, bars are thin solid pills,
+// and the only colour is the threshold (good, mid, low, stale) and the calm cache blue.
+
+/** The largest whole size in [min, max] at which `s` fits in `w`, or null. */
+function fitSize(s: string, max: number, min: number, w: number, bold = false): number | null {
+  for (let z = max; z >= min; z--) if (textW(s, z, bold) <= w) return z
+  return null
+}
+
+/** `s` at the largest size down to `min` that fits `w`; if none does, cut with an ellipsis. */
+function fitText(s: string, size: number, min: number, w: number, bold = false): { text: string; size: number } {
+  const z = fitSize(s, size, min, w, bold) ?? min
+  if (textW(s, z, bold) <= w) return { text: s, size: z }
+  const cs = [...s]
+  while (cs.length > 1 && textW(cs.join('') + '…', z, bold) > w) cs.pop()
+  return { text: cs.join('') + '…', size: z }
+}
+
+/** Greedy word wrap into at most `maxLines` lines of width `w`; a line that still overflows is cut. */
+function wrapText(s: string, size: number, w: number, maxLines: number): string[] {
+  const lines: string[] = []
+  // A duration like "2h 14m" stays on one line.
+  const words = s.replace(/(\d+[dhm]) (?=\d+[dhm])/g, '$1\u0001').split(' ').filter(t => t).map(t => t.replace(/\u0001/g, ' '))
+  for (const word of words) {
+    const last = lines[lines.length - 1]
+    if (last !== undefined && (textW(last + ' ' + word, size) <= w || lines.length >= maxLines)) lines[lines.length - 1] = last + ' ' + word
+    else lines.push(word)
+  }
+  return lines.map(l => fitText(l, size, size, w).text)
+}
+
+/** The status dot of a block: its bar colour, or the stale grey when it has no bar. */
+function cleanDot(cx: number, cy: number, r: Readout, p: Palette, k: Kit): string {
+  const c = r.fill === 'none' ? p.stale : fillPaint(r.fill, p, k)
+  return `<circle cx="${r1(cx)}" cy="${r1(cy)}" r="3" fill="${c}"/>`
+}
+
+const CLEAN_DOT_W = 11
+/** The dot sits level with the middle of the caps label, whatever size the hero is. */
+const CLEAN_DOT_Y = 17.5
+const CLEAN_BASE = 21
+const CLEAN_BAR_Y = 31
+const CLEAN_BAR_H = 6
+/** Blocks narrower than this drop the status dot (the bar colour still says the same). */
+const CLEAN_DOT_MIN_W = 100
+
+/**
+ * One band block: dot, caps label, big value, then the muted tail at the right.
+ * The label has priority over the dot and over the hero's size: a bare "98% 100% 52m" says
+ * nothing. A stale reading also keeps its "as of" note when there is any way to fit it.
+ */
+function cleanBandBlock(x: number, w: number, r: Readout, p: Palette, k: Kit, compact: boolean, isCache: boolean): string {
+  const size = compact ? 16 : 19
+  const values = isCache && r.value.startsWith('hot ') ? [r.value, r.value.slice(4)] : [r.value]
+  const label = (compact ? r.short : r.label).toUpperCase()
+  const labelW = textW(label, 10, true) + label.length * 0.8 + 7
+  const wantDot = w >= CLEAN_DOT_MIN_W
+  // Room kept for the note: its width plus the 10 px margin the tail check below asks for.
+  const stale = r.dim && r.extra ? textW(r.extra, 11) + 10 : 0
+
+  type Hero = { text: string; size: number; dot: boolean; label: boolean }
+  const place = (reserve: number): Hero | undefined => {
+    const room = w - labelW - reserve - (wantDot ? CLEAN_DOT_W : 0)
+    for (const c of values) {
+      const z = fitSize(c, size, 12, room, true)
+      if (z) return { text: c, size: z, dot: wantDot, label: true }
+    }
+    return undefined
+  }
+  let hero = (stale ? place(stale) : undefined) ?? place(0)
+  // No room for the label at all (very narrow): the value, with a dot if it fits.
+  if (!hero) {
+    for (const c of values) {
+      const z = fitSize(c, size, 12, w - CLEAN_DOT_W, true)
+      if (z) { hero = { text: c, size: z, dot: true, label: false }; break }
+    }
+  }
+  hero ??= { ...fitText(values[values.length - 1]!, size, 7, w, true), dot: false, label: false }
+
+  const valW = textW(hero.text, hero.size, true)
+  let at = x
+  let s = ''
+  if (hero.dot) { s += cleanDot(x + 3, CLEAN_DOT_Y, r, p, k); at += CLEAN_DOT_W }
+  if (hero.label) {
+    s += text(at, CLEAN_BASE, [{ text: label, fill: p.muted }], { size: 10, weight: 600, spacing: 0.8 })
+    at += labelW
+  }
+  s += text(at, CLEAN_BASE, [{ text: hero.text, fill: r.valueFill }], { size: hero.size, weight: 650 })
+  const room = x + w - (at + valW) - 10
+  const full = [r.detail, r.extra].filter(t => t).join(', ')
+  // Longest first. A stale reading prefers its "as of" note over the reset time; a reached
+  // limit keeps "limit reached" and then just the time.
+  const short = [r.detail.replace(/resets in /, ''), r.detail.replace(/^.*resets in /, '')]
+  const tails = isCache
+    ? [bandTail(r, true)]
+    : r.dim ? [full, bandTail(r, false), r.extra, ...short] : [full, bandTail(r, false), ...short, r.extra]
+  const tail = tails.find(t => t && textW(t, 11) <= room)
+  if (tail) s += text(x + w, CLEAN_BASE, [{ text: tail, fill: p.muted }], { size: 11, anchor: 'end' })
+  s += pill(x, CLEAN_BAR_Y, w, CLEAN_BAR_H, r.frac, r.fill, p, k)
+  return r.dim ? `<g opacity=".8">${s}</g>` : s
+}
+
+/** The strip above the prompt in the clean look. */
+function cleanBand(v: View, W: number, p: Palette, k: Kit): Art {
+  const H = BAND_H
+  const pad = W < 200 ? 5 : W < 420 ? 10 : 16
+  const gap = W < 200 ? 6 : W < 420 ? 14 : 28
+  const compact = W < 560
+  const inner = W - pad * 2
+  const cache = cacheReadout(v, p)
+  const na = limitsNa(v)
+  let body = ''
+  if (na) {
+    // Both windows say the same: one wide quiet block, then the cache.
+    const w1 = (inner - gap) * (2 / 3)
+    const w2 = inner - gap - w1
+    const t = fitText('Limits n/a', 12, 8, w1 - CLEAN_DOT_W)
+    body += `<circle cx="${r1(pad + 3)}" cy="${CLEAN_DOT_Y}" r="3" fill="${p.stale}"/>`
+    body += text(pad + CLEAN_DOT_W, CLEAN_BASE - 1, [{ text: t.text, fill: p.muted }], { size: t.size, weight: 500 })
+    body += pill(pad, CLEAN_BAR_Y, w1, CLEAN_BAR_H, 0, 'none', p, k)
+    body += cleanBandBlock(pad + w1 + gap, w2, cache, p, k, compact, true)
+  } else {
+    const bw = (inner - gap * 2) / 3
+    const reads = [windowReadout(v.fiveHour, p, 'clean'), windowReadout(v.sevenDay, p, 'clean'), cache]
+    reads.forEach((r, i) => { body += cleanBandBlock(pad + i * (bw + gap), bw, r, p, k, compact, i === 2) })
+  }
+  return { source: frame(W, H, p, k, body, CLEAN_BAR_H, 1), width: W, height: H }
+}
+
+/** The docked pane in the clean look: header, three stacked blocks (caps label, big value, thin bar, detail), footer. */
+function cleanPane(v: View, W: number, p: Palette, k: Kit, version: Version): Art {
+  const narrow = W < 360
+  const pad = narrow ? 14 : 22
+  const big = narrow ? 26 : 36
+  const barH = narrow ? 6 : 8
+  const inner = W - pad * 2
+  const dsize = narrow ? 11.5 : 12.5
+  const lh = narrow ? 14 : 16
+  const hairline = (y: number) => `<rect x="${pad}" y="${r1(y)}" width="${inner}" height="1" fill="${p.divider}"/>`
+  let body = ''
+
+  const headH = narrow ? 36 : 46
+  const head = fitText('Usage left', narrow ? 13 : 15, 10, inner, true)
+  body += text(pad, headH * 0.64, [{ text: head.text, fill: p.text }], { size: head.size, weight: 600 })
+  body += hairline(headH)
+  let y = headH + (narrow ? 16 : 24)
+
+  const block = (r: Readout, labels: string[]): void => {
+    let s = cleanDot(pad + 3, y + 5, r, p, k)
+    const lx = pad + CLEAN_DOT_W + 2
+    const caps = labels.map(l => l.toUpperCase())
+    const label = caps.find(l => textW(l, 10.5, true) + l.length <= inner - (lx - pad)) ?? caps[caps.length - 1]!
+    const lab = fitText(label, 10.5, 8, inner - (lx - pad), true)
+    s += text(lx, y + 9, [{ text: lab.text, fill: p.muted }], { size: lab.size, weight: 600, spacing: 1 })
+
+    // Hero: "hot" is a small word before the number; the unit trails it. Shrink, then drop the unit.
+    const word = r.value.startsWith('hot ') ? 'hot' : ''
+    const num = word ? r.value.slice(4) : r.value
+    const widthAt = (z: number, unit: boolean) =>
+      (word ? textW(word, Math.round(z * 0.42), true) + 6 : 0) + textW(num, z, true) +
+      (unit && r.unit ? textW(r.unit, Math.round(z * 0.42)) + 6 : 0)
+    let z = big
+    let unit = true
+    while (z > 14 && widthAt(z, unit) > inner) z--
+    if (widthAt(z, unit) > inner) { unit = false; z = big; while (z > 12 && widthAt(z, unit) > inner) z-- }
+    const small = Math.round(z * 0.42)
+    const numRoom = inner - (word ? textW(word, small, true) + 6 : 0)
+    const spans: Span[] = []
+    if (word) spans.push({ text: word, fill: p.muted, size: small, weight: 600 })
+    spans.push({ text: widthAt(z, unit) > inner ? fitText(num, z, 8, numRoom, true).text : num, fill: r.valueFill, dx: word ? 6 : 0 })
+    if (unit && r.unit) spans.push({ text: r.unit, fill: p.muted, size: small, weight: 500, dx: 6 })
+    const by = y + 20 + z * 0.72
+    s += text(pad, by, spans, { size: z, weight: 650 })
+
+    const barY = by + (narrow ? 10 : 13)
+    s += pill(pad, barY, inner, barH, r.frac, r.fill, p, k)
+    const lines = wrapText([r.detail, r.extra].filter(t => t).join(', '), dsize, inner, 3)
+    let ly = barY + barH + (narrow ? 15 : 18)
+    lines.forEach((l, i) => { s += text(pad, ly + i * lh, [{ text: l, fill: p.muted }], { size: dsize }) })
+    ly += Math.max(0, lines.length - 1) * lh
+    body += r.dim ? `<g opacity=".8">${s}</g>` : s
+    y = ly + (narrow ? 22 : 30)
+  }
+
+  const na = limitsNa(v)
+  if (na) {
+    block({ ...windowReadout(v.fiveHour, p, 'clean'), label: 'Limits' }, ['Limits'])
+  } else {
+    const w5 = windowReadout(v.fiveHour, p, 'clean')
+    const w7 = windowReadout(v.sevenDay, p, 'clean')
+    block(w5, [w5.label, w5.short])
+    block(w7, [w7.label, w7.short])
+  }
+  block(cacheReadout(v, p), ['Prompt cache', 'Cache'])
+
+  // Footer: the engine the mod was tested on, and a flag for any other.
+  body += hairline(y - 12)
+  y += 6
+  const footText = 'tested on ' + version.tested
+  const foot = fitText(footText, 11.5, 9, inner)
+  const untested = version.actual !== null && version.actual !== version.tested
+  const note = `untested engine ${version.actual ?? ''}`
+  const oneLine = foot.text === footText && textW(footText + '  ' + note, 11.5) <= inner - 6
+  const spans: Span[] = [{ text: foot.text, fill: p.faint }]
+  if (untested && oneLine) spans.push({ text: note, fill: p.midText, dx: 8 })
+  body += text(pad, y, spans, { size: foot.size })
+  if (untested && !oneLine) {
+    for (const l of wrapText(note, 11.5, inner, 2)) {
+      y += 16
+      body += text(pad, y, [{ text: l, fill: p.midText }], { size: 11.5 })
+    }
+  }
+  const H = Math.ceil(y + (narrow ? 12 : 16))
+  return { source: frame(W, H, p, k, body, barH, 1), width: W, height: H }
 }

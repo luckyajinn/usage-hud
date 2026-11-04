@@ -40,7 +40,7 @@ function log($: $T, where: string, err?: unknown): void {
 const isSetting = (v: unknown): v is TtlSetting => v === 'auto' || v === '5m' || v === '1h'
 const isTtl = (v: unknown): v is Ttl => v === '5m' || v === '1h'
 type Theme = ArtTheme | 'text'
-const isTheme = (v: unknown): v is Theme => v === 'christmas' || v === 'classic' || v === 'text'
+const isTheme = (v: unknown): v is Theme => v === 'clean' || v === 'classic' || v === 'christmas' || v === 'text'
 /** Surfaces that draw a pane beside the transcript when a client asks. */
 /**
  * Dark or light art. Neither the render input nor its viewport carries a colour
@@ -62,7 +62,7 @@ function toSnap(v: unknown): LimitsSnap | null {
 
 // Process-local facts (not in PluginState): a reload starts them over.
 let setting: TtlSetting = 'auto'
-let theme: Theme = 'christmas'
+let theme: Theme = 'clean'
 let turnDone = false
 let engineVersion: string | null = null
 let timer: Timer | null = null
@@ -135,7 +135,7 @@ async function learnTtl($: $T, t: Ttl | null): Promise<void> {
 
 export const register: Register = (on, options) => {
   setting = isSetting(options.cacheTtl) ? options.cacheTtl : 'auto'
-  theme = isTheme(options.theme) ? options.theme : 'christmas'
+  theme = isTheme(options.theme) ? options.theme : 'clean'
   turnDone = false
   timer?.cancel()
   timer = null
