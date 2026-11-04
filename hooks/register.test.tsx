@@ -937,7 +937,10 @@ const countAttach = (on: On) => {
   return () => n
 }
 
-for (const theme of ['christmas', 'classic', 'clean'] as const) {
+// Every art look; the loops below run for each, so a new look is covered by listing it here.
+const ART_LOOKS = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono'] as const
+
+for (const theme of ART_LOOKS) {
   kitTest(`${theme}: desktop band and pane draw Svg with the readout as alt`, { options: { theme } }, async ($, on) => {
     engine(on, [])
     await start($)
@@ -947,10 +950,6 @@ for (const theme of ['christmas', 'classic', 'clean'] as const) {
     expect(svg?.props.width).toBe(742)
     expect(svg?.props.height).toBe(44)
     expect(String(svg?.props.source).startsWith('<svg ')).toBe(true)
-    expect(String(svg?.props.source).includes('class="snowflake"')).toBe(theme === 'christmas')
-    if (theme === 'clean') {
-      for (const c of ['snowflake', 'holly', 'ornament', 'stripes']) expect(String(svg?.props.source).includes(`class="${c}"`)).toBe(false)
-    }
     expect(svg?.props.alt).toBe(
       '5-hour: 72% left, resets in 2h 14m 7-day: 40% left, resets in 3d 4h Cache: cold (new) Cache state is an estimate.',
     )
@@ -978,15 +977,15 @@ for (const theme of ['christmas', 'classic', 'clean'] as const) {
   })
 }
 
-// Source of the desktop band with none of the christmas art classes in it.
-const NOT_CHRISTMAS = ['snowflake', 'holly', 'ornament', 'stripes']
+// The clean look's svg ids start with uhn (band, dark: uhndb); any other look's differ.
+const CLEAN_ID = 'id="uhndbP"'
 
 kitTest('the manifest default is clean', async ($, on) => {
   engine(on, [])
   await start($)
   const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
   const src = String((await b.find({ type: 'Svg' }))?.props.source)
-  for (const c of NOT_CHRISTMAS) expect(src.includes(`class="${c}"`)).toBe(false)
+  expect(src).toContain(CLEAN_ID)
   await b.unmount()
 })
 
@@ -997,7 +996,7 @@ kitTest('explicit theme clean draws Svg on the desktop and Text on the terminal'
   const d = await $.ui.mount({ ...band(99), surface: 'desktop' })
   const svg = await d.find({ type: 'Svg' })
   expect(String(svg?.props.source).startsWith('<svg ')).toBe(true)
-  for (const c of NOT_CHRISTMAS) expect(String(svg?.props.source).includes(`class="${c}"`)).toBe(false)
+  expect(String(svg?.props.source)).toContain(CLEAN_ID)
   expect(await d.find({ type: 'Text' })).toBe(undefined)
   await d.unmount()
   const t = await $.ui.mount({ ...band(80), surface: 'terminal' })
@@ -1006,15 +1005,36 @@ kitTest('explicit theme clean draws Svg on the desktop and Text on the terminal'
   await t.unmount()
 })
 
-kitTest('explicit theme christmas still draws the snowflake and stripes on the desktop', { options: { theme: 'christmas' } }, async ($, on) => {
-  engine(on, [])
+kitTest('a saved theme of christmas (removed in 0.4.0) falls back to the default clean look', { options: { theme: 'christmas' as any } }, async ($, on) => {
+  engine(on, LIMITS, {}, ['desktop', 'terminal'])
   await start($)
+  await measure($)
   const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
   const src = String((await b.find({ type: 'Svg' }))?.props.source)
-  expect(src).toContain('class="snowflake"')
-  expect(src).toContain('class="stripes"')
+  expect(src).toContain(CLEAN_ID)
+  for (const c of ['snowflake', 'holly', 'ornament', 'stripes']) expect(src.includes(c)).toBe(false)
   await b.unmount()
+  const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
+  expect(String((await p.find({ type: 'Svg' }))?.props.source)).toContain('id="uhndpP"')
+  await p.unmount()
+  // The terminal still draws text.
+  const t = await $.ui.mount({ ...band(80), surface: 'terminal' })
+  expect(await t.find({ type: 'Svg' })).toBe(undefined)
+  await t.unmount()
 })
+
+for (const theme of ['midnight', 'paper', 'terminal', 'sunset', 'mono'] as const) {
+  kitTest(`explicit theme ${theme} draws its own svg on the desktop`, { options: { theme } }, async ($, on) => {
+    engine(on, [])
+    await start($)
+    await measure($)
+    const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+    const src = String((await b.find({ type: 'Svg' }))?.props.source)
+    expect(src.startsWith('<svg ')).toBe(true)
+    expect(src.includes(CLEAN_ID)).toBe(false)
+    await b.unmount()
+  })
+}
 
 kitTest('text theme draws Text on the desktop', { options: { theme: 'text' } }, async ($, on) => {
   engine(on, [])
@@ -1163,7 +1183,7 @@ kitTest('a desktop app start with no start surface opens once the surface is lis
 
 // ---- REVIEW 0.3 adversarial ----
 
-for (const bad of ['neon', 'TEXT', 'Christmas', '', 42, ['text']] as unknown[]) {
+for (const bad of ['neon', 'TEXT', 'Christmas', 'christmas', 'Clean', '', 42, ['text']] as unknown[]) {
   kitTest(`R4 invalid theme ${JSON.stringify(bad)} falls back to clean`, { options: { theme: bad as any } }, async ($, on) => {
     engine(on, LIMITS)
     await start($)
@@ -1174,7 +1194,7 @@ for (const bad of ['neon', 'TEXT', 'Christmas', '', 42, ['text']] as unknown[]) 
     expect(await b.find({ type: 'Text' })).toBe(undefined)
     const src = String(svg?.props.source)
     expect(src.startsWith('<svg ')).toBe(true)
-    for (const c of NOT_CHRISTMAS) expect(src.includes(`class="${c}"`)).toBe(false)
+    expect(src).toContain(CLEAN_ID)
     await b.unmount()
   })
 }
@@ -1274,7 +1294,7 @@ kitTest('R1 render with a throwing clock falls back to next(e) on the Svg path',
   await p.unmount()
 })
 
-for (const theme of ['christmas', 'classic', 'clean', 'text'] as const) {
+for (const theme of [...ART_LOOKS, 'text'] as const) {
   kitTest(`R3 ${theme}: render never writes state`, { options: { theme } }, async ($, on) => {
     let counting = false
     let writes = 0
@@ -1297,7 +1317,7 @@ for (const theme of ['christmas', 'classic', 'clean', 'text'] as const) {
   })
 }
 
-for (const theme of ['christmas', 'classic', 'clean'] as const) {
+for (const theme of ART_LOOKS) {
   kitTest(`R10 ${theme}: over 6 simulated hours timer wakes are never under 60 s apart`, { options: { theme } }, async ($, on) => {
     const lim: SessionUsage['rateLimits'] = [
       { kind: 'five_hour', percentUsed: 28, resetsAt: new Date(NOW + 61_000).toISOString() },
@@ -1328,7 +1348,7 @@ for (const theme of ['christmas', 'classic', 'clean'] as const) {
   })
 }
 
-for (const theme of ['christmas', 'classic', 'clean'] as const) {
+for (const theme of ART_LOOKS) {
 kitTest(`R12 ${theme}: privacy: art themes log nothing and store only limits`, { options: { theme } }, async ($, on) => {
   const { mem, logs, clock } = engine(on, LIMITS)
   countAttach(on)

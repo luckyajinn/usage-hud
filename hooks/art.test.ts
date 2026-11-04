@@ -56,7 +56,8 @@ function wellFormed(svg: string): boolean {
   return at === svg.length && stack.length === 0
 }
 
-const THEMES: ArtTheme[] = ['christmas', 'classic', 'clean']
+// Every art theme: the generic tests below run against each, so a new look is covered by listing it here.
+const THEMES: ArtTheme[] = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono']
 
 test('every state, theme, scheme and width draws well-formed SVG under 20 KB', () => {
   for (const theme of THEMES) for (const dark of [true, false]) for (const [k, v] of Object.entries(STATES)) {
@@ -72,18 +73,20 @@ test('every state, theme, scheme and width draws well-formed SVG under 20 KB', (
 
 test('width follows the measured cell sizes; the band is about two rows tall', () => {
   // Measured on the desktop app: band about 750 px at 99 columns, pane about 320 px at 64.
-  expect(bandSvg(base(), 99, 'christmas', true).width).toBe(742)
-  expect(paneSvg(base(), 64, 'christmas', true, VER).width).toBe(320)
-  for (const cols of [24, 64, 99]) {
-    const bw = Math.max(60, Math.floor(cols * BAND_CELL_PX))
-    const b = bandSvg(base(), cols, 'christmas', true)
-    expect(b.width).toBe(bw)
-    expect(b.height).toBe(BAND_H)
-    expect(b.source).toContain(`width="${bw}" height="${BAND_H}" viewBox="0 0 ${bw} ${BAND_H}"`)
-    const pw = Math.max(120, Math.floor(cols * PANE_CELL_PX))
-    const p = paneSvg(base(), cols, 'christmas', true, VER)
-    expect(p.width).toBe(pw)
-    expect(p.source).toContain(`viewBox="0 0 ${pw} ${p.height}"`)
+  for (const theme of THEMES) {
+    expect(bandSvg(base(), 99, theme, true).width).toBe(742)
+    expect(paneSvg(base(), 64, theme, true, VER).width).toBe(320)
+    for (const cols of [1, 12, 24, 64, 99, 140]) {
+      const bw = Math.max(60, Math.floor(cols * BAND_CELL_PX))
+      const b = bandSvg(base(), cols, theme, true)
+      expect(b.width).toBe(bw)
+      expect(b.height).toBe(BAND_H)
+      expect(b.source).toContain(`width="${bw}" height="${BAND_H}" viewBox="0 0 ${bw} ${BAND_H}"`)
+      const pw = Math.max(120, Math.floor(cols * PANE_CELL_PX))
+      const p = paneSvg(base(), cols, theme, true, VER)
+      expect(p.width).toBe(pw)
+      expect(p.source).toContain(`viewBox="0 0 ${pw} ${p.height}"`)
+    }
   }
 })
 
@@ -109,7 +112,7 @@ test('every state renders its label in the band and the pane', () => {
     }
   }
   // The pane spells the details out.
-  const pane = (v: View) => words(paneSvg(v, 64, 'christmas', true, VER).source)
+  const pane = (v: View) => words(paneSvg(v, 64, 'clean', true, VER).source)
   expect(pane(STATES.na!)).toContain('LIMITS')
   expect(pane(STATES.na!)).toContain('n/a')
   expect(pane(STATES.exceeded!)).toContain('left')
@@ -118,47 +121,38 @@ test('every state renders its label in the band and the pane', () => {
   expect(pane(STATES.ok!)).toContain('resets in 2h 14m')
   expect(pane(STATES.resetting!)).toContain('resetting now')
   expect(pane(STATES.ok!)).toContain('tested on 2.1.316')
-  expect(words(paneSvg(base(), 64, 'christmas', true, { tested: '2.1.316', actual: '2.1.400' }).source)).toContain('untested engine 2.1.400')
+  for (const theme of THEMES) {
+    expect(words(paneSvg(base(), 64, theme, true, { tested: '2.1.316', actual: '2.1.400' }).source)).toContain('untested engine 2.1.400')
+  }
 })
 
 test('the art shows whole minutes only, so it changes at most once a minute', () => {
-  const a = (ms: number) => words(bandSvg(base({ cache: hot(ms) }), 99, 'christmas', true).source)
-  expect(a(9 * M + 59_000)).toContain('hot 9m')
-  expect(a(9 * M + 1_000)).toContain('hot 9m')
-  expect(a(9 * M + 59_000)).not.toContain(':')
-  expect(a(30_000)).toContain('hot <1m')
-  expect(bandSvg(base({ cache: hot(9 * M + 59_000) }), 99, 'christmas', true).source)
-    .toBe(bandSvg(base({ cache: hot(9 * M + 1_000) }), 99, 'christmas', true).source)
+  for (const theme of THEMES) {
+    const a = (ms: number) => words(bandSvg(base({ cache: hot(ms) }), 99, theme, true).source)
+    expect(a(9 * M + 59_000)).toContain('hot 9m')
+    expect(a(9 * M + 1_000)).toContain('hot 9m')
+    expect(a(9 * M + 59_000)).not.toContain(':')
+    expect(a(30_000)).toContain('hot <1m')
+    for (const cols of [99, 64]) {
+      expect(bandSvg(base({ cache: hot(9 * M + 59_000) }), cols, theme, true).source)
+        .toBe(bandSvg(base({ cache: hot(9 * M + 1_000) }), cols, theme, true).source)
+      expect(paneSvg(base({ cache: hot(9 * M + 59_000) }), cols, theme, true, VER).source)
+        .toBe(paneSvg(base({ cache: hot(9 * M + 1_000) }), cols, theme, true, VER).source)
+    }
+  }
 })
 
 test('text placed in the SVG is escaped', () => {
   expect(esc(`a&b<c>d"e'f`)).toBe('a&amp;b&lt;c&gt;d&quot;e&#39;f')
-  const p = paneSvg(base(), 64, 'christmas', true, { tested: '2.1.316', actual: '<x&"y\'>' })
-  expect(wellFormed(p.source)).toBe(true)
-  expect(p.source).toContain('&lt;x&amp;&quot;y&#39;&gt;')
-  expect(p.source.includes('<x&')).toBe(false)
+  for (const theme of THEMES) {
+    const p = paneSvg(base(), 64, theme, true, { tested: '2.1.316', actual: '<x&"y\'>' })
+    expect(wellFormed(p.source)).toBe(true)
+    expect(p.source).toContain('&lt;x&amp;&quot;y&#39;&gt;')
+    expect(p.source.includes('<x&')).toBe(false)
+  }
 })
 
-test('christmas has candy stripes, a snowflake, ornaments, holly and snow; classic has none', () => {
-  const x = bandSvg(base(), 99, 'christmas', true).source + paneSvg(base(), 64, 'christmas', true, VER).source
-  expect(x).toContain('<pattern')
-  expect(x).toContain('class="stripes"')
-  expect(x).toContain('class="snowflake"')
-  expect(x).toContain('class="ornament"')
-  expect(x).toContain('class="holly"')
-  expect(x).toContain('class="snow"')
-  const c = bandSvg(base(), 99, 'classic', true).source + paneSvg(base(), 64, 'classic', true, VER).source
-  for (const k of ['<pattern', 'stripes', 'snowflake', 'ornament', 'holly', 'class="snow"']) expect(c.includes(k)).toBe(false)
-})
-
-test('christmas fills: stripes over 50 left, gold 20 to 50, deep red under 20', () => {
-  const p = palette('christmas', true)
-  const fills = (pl: number) => bandSvg(base({ fiveHour: win('5h', pl, H), sevenDay: { label: '7d', state: 'none' }, cache: { state: 'cold', reason: 'new' } }), 99, 'christmas', true).source
-  expect(fills(80)).toContain('fill="url(#uhxdbC)"')
-  expect(fills(40)).toContain(`fill="${p.mid}"`)
-  expect(fills(40).includes('url(#uhxdbC)')).toBe(false)
-  expect(fills(10)).toContain(`fill="${p.low}"`)
-  // Classic: solid green, amber, red.
+test('classic bar fills: solid green over 50, amber 20 to 50, red under 20', () => {
   const q = palette('classic', true)
   const cl = (pl: number) => bandSvg(base({ fiveHour: win('5h', pl, H) }), 99, 'classic', true).source
   expect(cl(80)).toContain(`fill="${q.good}"`)
@@ -168,16 +162,18 @@ test('christmas fills: stripes over 50 left, gold 20 to 50, deep red under 20', 
 
 test('palettes switch with the theme and with dark or light', () => {
   const panels = new Set<string>()
-  for (const theme of THEMES) for (const dark of [true, false]) {
-    const p = palette(theme, dark)
-    panels.add(p.panel)
-    expect(bandSvg(base(), 99, theme, dark).source).toContain(`stop-color="${p.panel}"`)
+  for (const theme of THEMES) {
+    expect(palette(theme, true).panel).not.toBe(palette(theme, false).panel)
+    for (const dark of [true, false]) {
+      const p = palette(theme, dark)
+      panels.add(p.panel)
+      expect(bandSvg(base(), 99, theme, dark).source).toContain(`stop-color="${p.panel}"`)
+      expect(paneSvg(base(), 64, theme, dark, VER).source).toContain(`stop-color="${p.panel}"`)
+    }
   }
-  // Classic and clean share a white light panel, so five distinct panels.
-  expect(panels.size).toBe(5)
-  // Empty track: dark green on dark, pale green on light.
-  expect(palette('christmas', true).track).toBe('#1e4630')
-  expect(palette('christmas', false).track).toBe('#d5e9d8')
+  // At least classic dark, clean dark and the white light panel they share.
+  expect(panels.size >= 3).toBe(true)
+  expect(palette('classic', true).panel).not.toBe(palette('clean', true).panel)
 })
 
 // WCAG contrast of each text colour against the panel.
@@ -203,8 +199,10 @@ test('text contrast against the panel is at least 4.5:1 in every palette', () =>
 })
 
 test('no randomness: the same view draws the same string', () => {
-  expect(bandSvg(base(), 99, 'christmas', true).source).toBe(bandSvg(base(), 99, 'christmas', true).source)
-  expect(paneSvg(base(), 64, 'christmas', true, VER).source).toBe(paneSvg(base(), 64, 'christmas', true, VER).source)
+  for (const theme of THEMES) for (const dark of [true, false]) {
+    expect(bandSvg(base(), 99, theme, dark).source).toBe(bandSvg(base(), 99, theme, dark).source)
+    expect(paneSvg(base(), 64, theme, dark, VER).source).toBe(paneSvg(base(), 64, theme, dark, VER).source)
+  }
 })
 
 test('alt is the command readout on one line', () => {
@@ -216,10 +214,15 @@ test('alt is the command readout on one line', () => {
 })
 
 test('system fonts with tabular numbers, no embedded font, no animation', () => {
-  const s = paneSvg(base(), 64, 'christmas', true, VER).source
-  expect(s).toContain('font-family="system-ui, &#39;Segoe UI&#39;, sans-serif"')
-  expect(s).toContain('font-variant-numeric:tabular-nums')
-  for (const k of ['@font-face', '<animate', '<script', 'base64']) expect(s.includes(k)).toBe(false)
+  for (const theme of THEMES) for (const s of [bandSvg(base(), 99, theme, true).source, paneSvg(base(), 64, theme, true, VER).source]) {
+    expect(s).toContain('font-family="')
+    expect(s).toContain('font-variant-numeric:tabular-nums')
+    for (const k of ['@font-face', '<animate', '<script', 'base64']) expect(s.includes(k)).toBe(false)
+  }
+  // The default stack, for the looks that use it.
+  for (const theme of ['clean', 'classic'] as const) {
+    expect(paneSvg(base(), 64, theme, true, VER).source).toContain('font-family="system-ui, &#39;Segoe UI&#39;, sans-serif"')
+  }
 })
 
 // ---- clean theme ----
@@ -264,10 +267,10 @@ test('clean: the band is exactly floor(cols * BAND_CELL_PX) by BAND_H, the pane 
   }
 })
 
-test('clean: no snowflake, holly, ornament, snow, stripes or pattern', () => {
+test('clean: no decoration: no pattern, highlight or second gradient', () => {
   for (const dark of [true, false]) for (const v of Object.values(STATES)) {
     for (const x of [cleanBandOf(v, 99, dark).source, cleanPaneOf(v, 64, dark).source]) {
-      for (const k of ['<pattern', 'stripes', 'snowflake', 'ornament', 'holly', 'snow', 'candy', 'opacity=".2"']) {
+      for (const k of ['<pattern', 'ornament', 'opacity=".2"']) {
         if (x.includes(k)) throw new Error(`clean draws ${k}`)
       }
       // One gradient only: the panel. No frost or flake gradient.
@@ -414,9 +417,9 @@ test('clean: text placed in the art is escaped', () => {
   expect(n.source.includes('<x&')).toBe(false)
 })
 
-test('clean: gradient ids are unique per theme, scheme and surface, and every url() resolves', () => {
+test('gradient ids are unique per theme, scheme and surface, and every url() resolves', () => {
   const owner = new Map<string, string>()
-  for (const theme of ['christmas', 'classic', 'clean'] as ArtTheme[]) for (const dark of [true, false]) {
+  for (const theme of THEMES) for (const dark of [true, false]) {
     for (const [kind, art] of [['band', bandSvg(base(), 99, theme, dark)], ['pane', paneSvg(base(), 64, theme, dark, VER)]] as const) {
       const ids = [...art.source.matchAll(/ id="([^"]+)"/g)].map(m => m[1]!)
       const key = `${theme}/${dark ? 'dark' : 'light'}/${kind}`
@@ -430,6 +433,18 @@ test('clean: gradient ids are unique per theme, scheme and surface, and every ur
     }
   }
   expect([...owner].filter(([, k]) => k.startsWith('clean/')).length).toBe(4)
+})
+
+test('svg ids keep their pinned letters: n for clean, c for classic, one letter per theme', () => {
+  const tag = (theme: ArtTheme, dark: boolean, kind: 'band' | 'pane'): string => {
+    const a = kind === 'band' ? bandSvg(base(), 99, theme, dark) : paneSvg(base(), 64, theme, dark, VER)
+    return /id="uh(\w)([dl])([bp])P"/.exec(a.source)!.slice(1).join('')
+  }
+  expect(tag('clean', true, 'band')).toBe('ndb')
+  expect(tag('clean', false, 'pane')).toBe('nlp')
+  expect(tag('classic', true, 'pane')).toBe('cdp')
+  expect(tag('classic', false, 'band')).toBe('clb')
+  expect(new Set(THEMES.map(t => tag(t, true, 'band')[0])).size).toBe(THEMES.length)
 })
 
 /** Every <text> in a drawing with its horizontal extent, as the art measures it (textW, letter-spacing, dx). */

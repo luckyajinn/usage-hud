@@ -12,7 +12,7 @@ It draws a one-line strip above the message box and a docked pane beside the con
 5h [##########] 98% 2h 56m  |  7d [##########] 100% 6d 23h  |  Cache [#########-] hot 52m
 ```
 
-Bars are green above 50% left, amber from 20% to 50%, red under 20% (the `christmas` look uses its own festive colours at the same thresholds). Readings older than 10 minutes are dimmed with "as of".
+Bars are green above 50% left, amber from 20% to 50%, red under 20%. Readings older than 10 minutes are dimmed with "as of".
 
 ## Look
 
@@ -20,14 +20,18 @@ Option `theme`:
 
 - `clean` (default): in the desktop app, mobile and VS Code the strip and pane are drawn as a minimal card: a quiet dark panel with a large percent-left number for each limit, a thin solid bar (green above 50% left, amber from 20% to 50%, red under 20%) and a small status dot beside each label. No decoration.
 - `classic`: the older neutral card with solid green, amber and red bars.
-- `christmas`: the festive card: a deep green panel with a thin gold border, candy-cane stripes on bars with more than 50% left, gold from 20% to 50%, deep red under 20%, a snowflake by the cache (bright while hot, grey when cold), small ornaments by the limits, holly in the pane and a few snow dots. Opt-in.
+- `midnight`: deep navy glass with a neon accent.
+- `paper`: a warm light editorial card.
+- `terminal`: monospace phosphor retro.
+- `sunset`: warm gradient bars.
+- `mono`: ultra-minimal monochrome lines.
 - `text`: the text look shown above, everywhere.
 
 The terminal always draws the text look. The cards are drawn in dark colours (the app does not tell a mod whether it is in light or dark mode). They show whole minutes and redraw at most once a minute; only the text look counts down seconds in the last 10 minutes of the cache.
 
-Set it with `/plugin configure usage-hud@cj-mods` in a terminal session. To get the christmas look, run that command and set Look to `christmas`.
+Set it with `/plugin configure usage-hud@cj-mods` in a terminal session.
 
-Changed in 0.4.0: the default look changed from `christmas` to `clean`. `christmas` is still available as an option.
+Changed in 0.4.0: the default look changed from `christmas` to `clean`, and the festive `christmas` look was removed. A saved value of `christmas` now falls back to the default look (`clean`).
 
 ## Install
 

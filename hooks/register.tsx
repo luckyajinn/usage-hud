@@ -7,7 +7,7 @@ import type { CacheStamp, LimitsSnap, Ttl, TtlSetting } from '../types'
 import { computeView, mergeSnap, nextWake, pickLimit, resolveTtl, stampFromResume, stampFromStep, ttlFromResume } from './data'
 import type { View } from './data'
 import { bandSegments, commandText, paneLines } from './format'
-import { altText, bandSvg, paneSvg } from './art'
+import { ART_THEMES, altText, bandSvg, paneSvg } from './art'
 import type { Art, ArtTheme } from './art'
 import type { Seg } from './format'
 
@@ -40,7 +40,7 @@ function log($: $T, where: string, err?: unknown): void {
 const isSetting = (v: unknown): v is TtlSetting => v === 'auto' || v === '5m' || v === '1h'
 const isTtl = (v: unknown): v is Ttl => v === '5m' || v === '1h'
 type Theme = ArtTheme | 'text'
-const isTheme = (v: unknown): v is Theme => v === 'clean' || v === 'classic' || v === 'christmas' || v === 'text'
+const isTheme = (v: unknown): v is Theme => ART_THEMES.includes(v as ArtTheme) || v === 'text'
 /** Surfaces that draw a pane beside the transcript when a client asks. */
 /**
  * Dark or light art. Neither the render input nor its viewport carries a colour

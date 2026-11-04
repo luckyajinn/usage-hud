@@ -22,11 +22,15 @@
     "theme": {
       "type": "string",
       "title": "Look",
-      "description": "clean is the default minimal look drawn in the desktop app, mobile and VS Code; classic is the older neutral card; christmas is the optional festive card; text draws text everywhere. The terminal always draws text.",
+      "description": "clean is the default minimal look drawn in the desktop app, mobile and VS Code; classic is the older neutral card; midnight, paper, terminal, sunset and mono are alternative looks; text draws text everywhere. The terminal always draws text.",
       "options": [
         "clean",
         "classic",
-        "christmas",
+        "midnight",
+        "paper",
+        "terminal",
+        "sunset",
+        "mono",
         "text"
       ],
       "default": "clean"
