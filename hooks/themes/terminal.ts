@@ -7,7 +7,7 @@
 // Text is measured with a monospace width (mw below), not the shared proportional textW, since
 // every glyph of a monospace font is the same ~0.6em wide.
 import type { View } from '../data'
-import { BAND_H, bandTail, cacheReadout, esc, fillPaint, limitsNa, r1, text, windowReadout } from '../artkit'
+import { BAND_H, bandTail, cacheReadout, cacheTone, esc, fillPaint, limitsNa, r1, text, windowReadout } from '../artkit'
 import type { Art, Fill, Palette, Readout } from '../artkit'
 
 /** Single letter in svg ids: 'uh' + ID_TAG + (dark ? 'd' : 'l') + 'b'. Pinned: do not change. */
@@ -22,14 +22,14 @@ const DARK: Palette = {
   text: '#c8ffd2', muted: '#6fcf86', faint: '#58a96c',
   track: '#14261a', good: '#39ff7a', mid: '#ffb000', low: '#ff3b3b', stale: '#6b7058',
   midText: '#ffc23d', lowText: '#ff6a5c',
-  frost: '#2fd6e0', hotText: '#7cecf2',
+  frost: '#2fd6e0', hotText: '#7cecf2', hotRed: '#ff5f56', coldBlue: '#5eb8ff',
 }
 const LIGHT: Palette = {
   panel: '#f3f1e7', panel2: '#f8f7f0', border: '#c9c7b4', divider: '#c9c7b4',
   text: '#0d3a1b', muted: '#2a5e38', faint: '#3c6a47',
   track: '#dedbc9', good: '#1d8a3e', mid: '#c27a00', low: '#cc2a22', stale: '#a3a38f',
   midText: '#8a5200', lowText: '#b0221b',
-  frost: '#0e8a96', hotText: '#0a6670',
+  frost: '#0e8a96', hotText: '#0a6670', hotRed: '#b0221b', coldBlue: '#0b5aa8',
 }
 
 export function palette(dark: boolean): Palette {
@@ -180,7 +180,7 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
   const gap = W < 200 ? 6 : W < 420 ? 14 : 26
   const compact = W < 560
   const inner = W - pad * 2
-  const cache = cacheReadout(v, p)
+  const cache = cacheTone(cacheReadout(v, p), v, p)
   let body = ''
   if (limitsNa(v)) {
     // Both windows say the same: one wide quiet block, then the cache.

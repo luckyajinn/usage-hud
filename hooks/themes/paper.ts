@@ -5,7 +5,7 @@
 // green, ochre, brick red, warm grey for stale readings, and a blue-black ink for the cache.
 import type { View } from '../data'
 import {
-  BAND_H, bandTail, cacheReadout, esc, fillPaint, fitText, limitsNa, r1, text, textW,
+  BAND_H, bandTail, cacheReadout, cacheTone, esc, fillPaint, fitText, limitsNa, r1, text, textW,
   windowReadout,
 } from '../artkit'
 import type { Art, Fill, Palette, Readout, Span } from '../artkit'
@@ -20,14 +20,14 @@ const DARK: Palette = {
   text: '#f0e8d8', muted: '#c2b6a2', faint: '#ab9f8b',
   track: '#7d7262', good: '#86b27c', mid: '#d6a44c', low: '#dc7a62', stale: '#857a6b',
   midText: '#e0b25e', lowText: '#ec8d74',
-  frost: '#8fb0c8', hotText: '#a6c2d6',
+  frost: '#8fb0c8', hotText: '#a6c2d6', hotRed: '#ee8a78', coldBlue: '#8fb4e6',
 }
 const LIGHT: Palette = {
   panel: '#f4eddc', panel2: '#faf6ea', border: '#d6cbb3', divider: '#ddd2bb',
   text: '#2a241c', muted: '#5b5041', faint: '#685c4b',
   track: '#8f826d', good: '#2e6b3c', mid: '#a8741a', low: '#a63b29', stale: '#a89c88',
   midText: '#83570c', lowText: '#9b3121',
-  frost: '#2f5878', hotText: '#2a5070',
+  frost: '#2f5878', hotText: '#2a5070', hotRed: '#9b2c1f', coldBlue: '#1f4e8c',
 }
 
 export function palette(dark: boolean): Palette {
@@ -153,7 +153,7 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
   const gap = W < 200 ? 8 : W < 420 ? 16 : 30
   const compact = W < 560
   const inner = W - pad * 2
-  const cache = cacheReadout(v, p)
+  const cache = cacheTone(cacheReadout(v, p), v, p)
   // Column rules: a hairline in the middle of each gap, as between newspaper columns.
   const colRule = (gx: number) => (gap >= 12 ? rect(gx - 0.5, 9, 1, 28, p.divider) : '')
   let body = ''

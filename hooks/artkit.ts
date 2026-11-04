@@ -15,6 +15,8 @@ export type Palette = {
   track: string; good: string; mid: string; low: string; stale: string
   midText: string; lowText: string
   frost: string; hotText: string
+  /** Optional: a theme sets these to colour the cache text red (hot) and blue (cold). */
+  hotRed?: string; coldBlue?: string
 }
 
 /** What a bar is filled with: the threshold colours, the cache blue, or nothing. */
@@ -145,6 +147,12 @@ export function cacheReadout(v: View, p: Palette): Readout {
     ...base, value: 'hot ' + wholeMin(c.leftMs), valueFill: last ? p.midText : p.hotText,
     detail: `${v.ttl} cache lifetime, an estimate`, frac: (Math.max(0.5, Math.floor(c.leftMs / MIN)) * MIN) / ttlMs(v.ttl), fill: last ? 'mid' : 'frost',
   }
+}
+
+/** The cache readout with the theme's hot-red / cold-blue text, when the palette defines them. */
+export function cacheTone(r: Readout, v: View, p: Palette): Readout {
+  const c = v.cache.state === 'hot' ? p.hotRed : p.coldBlue
+  return c ? { ...r, valueFill: c } : r
 }
 
 /** Short trailing words for the band: the reset time, or the cold reason; never the cache note. */

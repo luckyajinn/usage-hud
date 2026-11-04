@@ -6,7 +6,7 @@
 // warning, deep rose-red low, dusty mauve stale, and twilight lavender for the hot cache.
 import type { View } from '../data'
 import {
-  BAND_H, bandTail, cacheReadout, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout,
+  BAND_H, bandTail, cacheReadout, cacheTone, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout,
 } from '../artkit'
 import type { Art, Fill, Palette, Readout } from '../artkit'
 
@@ -21,14 +21,14 @@ const DARK: Palette = {
   text: '#fff3ea', muted: '#e6c3c6', faint: '#d0a9b6',
   track: '#45304f', good: '#e9c64f', mid: '#ff9f45', low: '#f04f72', stale: '#8f7c92',
   midText: '#ffbb6e', lowText: '#ff93a6',
-  frost: '#a993ff', hotText: '#cdbdff',
+  frost: '#a993ff', hotText: '#cdbdff', hotRed: '#ff7e8d', coldBlue: '#8fb8ff',
 }
 const LIGHT: Palette = {
   panel: '#fcdfe2', panel2: '#fff3e5', border: '#efc4c2', divider: '#f0cfcc',
   text: '#3a1b31', muted: '#743c58', faint: '#7c4a66',
   track: '#f3cfd0', good: '#d79a17', mid: '#ee8a1f', low: '#d62f5e', stale: '#bba6b6',
   midText: '#8e4400', lowText: '#ab1240',
-  frost: '#8a74ee', hotText: '#5638ad',
+  frost: '#8a74ee', hotText: '#5638ad', hotRed: '#b3162f', coldBlue: '#1f4fb0',
 }
 
 /** Two stops per fill (left, right): each state varies inside its own colour family. */
@@ -186,7 +186,7 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
   const gap = W < 200 ? 7 : W < 420 ? 14 : 28
   const compact = W < 560
   const inner = W - pad * 2
-  const cache = cacheReadout(v, p)
+  const cache = cacheTone(cacheReadout(v, p), v, p)
   let body = ''
   if (limitsNa(v)) {
     // Both windows say the same: one wide quiet block, then the cache.

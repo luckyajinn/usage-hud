@@ -5,7 +5,7 @@
 // red under 20, mid grey when a reading is stale. Healthy stays quiet; trouble stands out.
 import type { View } from '../data'
 import {
-  BAND_H, bandTail, cacheReadout, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout,
+  BAND_H, bandTail, cacheReadout, cacheTone, esc, fitSize, fitText, limitsNa, r1, text, textW, windowReadout,
 } from '../artkit'
 import type { Art, Fill, Palette, Readout, Span } from '../artkit'
 
@@ -22,14 +22,14 @@ const DARK: Palette = {
   text: '#f4f4f4', muted: '#a6a6a6', faint: '#8c8c8c',
   track: '#38383b', good: '#f4f4f4', mid: '#f2a531', low: '#ff4f4f', stale: '#6b6b6e',
   midText: '#f5b14a', lowText: '#ff6e6e',
-  frost: '#d6d6d6', hotText: '#f4f4f4',
+  frost: '#d6d6d6', hotText: '#f4f4f4', hotRed: '#ff5a5a', coldBlue: '#6db3ff',
 }
 const LIGHT: Palette = {
   panel: '#ffffff', panel2: '#ffffff', border: '#e6e6e6', divider: '#e8e8e8',
   text: '#111111', muted: '#545454', faint: '#6b6b6b',
   track: '#d0d0d0', good: '#111111', mid: '#d98a00', low: '#e0261f', stale: '#a9a9a9',
   midText: '#985800', lowText: '#c41d18',
-  frost: '#2e2e2e', hotText: '#111111',
+  frost: '#2e2e2e', hotText: '#111111', hotRed: '#c41d18', coldBlue: '#0b57b0',
 }
 
 export function palette(dark: boolean): Palette {
@@ -136,7 +136,7 @@ function bandBlock(x: number, w: number, r: Readout, p: Palette, compact: boolea
     z = f.size; numText = f.text
   }
   const spans: Span[] = []
-  if (showWord) spans.push({ text: word, fill: p.muted, size: wordZ, weight: 400 })
+  if (showWord) spans.push({ text: word, fill: r.valueFill, size: wordZ, weight: 400 })
   spans.push({ text: numText, fill: r.valueFill, dx: showWord ? 4 : 0 })
   s += text(x, B_NUM_Y, spans, { size: z, weight: 300 })
   if (withSlider) {
@@ -155,7 +155,7 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
   const gap = W < 200 ? 8 : W < 420 ? 18 : 36
   const compact = W < 560
   const inner = W - pad * 2
-  const cache = cacheReadout(v, p)
+  const cache = cacheTone(cacheReadout(v, p), v, p)
   let body = ''
   if (limitsNa(v)) {
     // Both windows say the same: one wide quiet block (an empty slider), then the cache.

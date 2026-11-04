@@ -414,3 +414,51 @@ test('clean: text colours keep 4.5:1 against the panel in dark and light', () =>
     }
   }
 })
+
+// ---- cache tones: hot cache text red, cold cache text blue (the five newer looks only) ----
+
+const TONED: ArtTheme[] = ['midnight', 'paper', 'terminal', 'sunset', 'mono']
+
+/** The fills of every tspan whose text matches `re`. */
+const fillsOf = (svg: string, re: RegExp): string[] =>
+  [...svg.matchAll(/<tspan fill="([^"]+)"[^>]*>([^<]*)<\/tspan>/g)].filter(m => re.test(m[2]!)).map(m => m[1]!)
+
+test('cache tones: palettes define hotRed and coldBlue with 4.5:1 contrast on the panel, in every scheme', () => {
+  for (const theme of TONED) for (const dark of [true, false]) {
+    const p = palette(theme, dark)
+    expect(p.hotRed).toBeDefined()
+    expect(p.coldBlue).toBeDefined()
+    for (const c of [p.hotRed!, p.coldBlue!]) {
+      expect(contrast(c, p.panel)).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(c, p.panel2)).toBeGreaterThanOrEqual(4.5)
+    }
+  }
+})
+
+test('cache tones: a hot cache draws its text in hotRed (also in the last minute), a cold one in coldBlue', () => {
+  for (const theme of TONED) for (const dark of [true, false]) for (const cols of [100, 64]) {
+    const p = palette(theme, dark)
+    for (const left of [52 * M + 10_000, 9 * M, 30_000]) {
+      const svg = bandSvg(base({ cache: hot(left) }), cols, theme, dark).source
+      const fills = fillsOf(svg, /\dm|<1m/)
+      expect(fills.includes(p.hotRed!)).toBe(true)
+    }
+    const cold = bandSvg(base({ cache: { state: 'cold', reason: 'expired' } }), cols, theme, dark).source
+    expect(fillsOf(cold, /^cold$|^expired/).includes(p.coldBlue!)).toBe(true)
+  }
+})
+
+test('cache tones: the limit numbers keep their own colours', () => {
+  for (const theme of TONED) {
+    const p = palette(theme, true)
+    const svg = bandSvg(base({ fiveHour: win('5h', 12, 41 * M) }), 100, theme, true).source
+    expect(fillsOf(svg, /^12%$/).includes(p.lowText)).toBe(true)
+  }
+})
+
+test('cache tones: clean and classic are left as they were', () => {
+  for (const theme of ['clean', 'classic'] as ArtTheme[]) {
+    expect(palette(theme, true).hotRed).toBeUndefined()
+    expect(palette(theme, true).coldBlue).toBeUndefined()
+  }
+})

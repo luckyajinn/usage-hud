@@ -9,7 +9,7 @@
 // bright "leading edge" cap.
 import type { View } from '../data'
 import {
-  BAND_H, FONT, bandTail, cacheReadout, esc, fitText, limitsNa, r1, text, textW, windowReadout,
+  BAND_H, FONT, bandTail, cacheReadout, cacheTone, esc, fitText, limitsNa, r1, text, textW, windowReadout,
 } from '../artkit'
 import type { Art, Fill, Palette, Readout, Span } from '../artkit'
 
@@ -23,14 +23,14 @@ const DARK: Palette = {
   text: '#e9effc', muted: '#9eabc6', faint: '#8d9ab6',
   track: '#18213a', good: '#2fd6a6', mid: '#f4b54a', low: '#ff6b7d', stale: '#55617d',
   midText: '#f7c46f', lowText: '#ff8d9a',
-  frost: '#38c8f0', hotText: '#8fd0ff',
+  frost: '#38c8f0', hotText: '#8fd0ff', hotRed: '#ff7b8a', coldBlue: '#7cc4ff',
 }
 const LIGHT: Palette = {
   panel: '#eef2f9', panel2: '#fcfdff', border: '#cfd7e8', divider: '#dde3ef',
   text: '#0c1426', muted: '#435069', faint: '#4f5b74',
   track: '#dfe5f0', good: '#0d9b7f', mid: '#c97a00', low: '#d8344c', stale: '#a9b3c6',
   midText: '#875400', lowText: '#b91f38',
-  frost: '#0a87b0', hotText: '#1257a8',
+  frost: '#0a87b0', hotText: '#1257a8', hotRed: '#b81d3a', coldBlue: '#0b57b0',
 }
 
 export function palette(dark: boolean): Palette {
@@ -123,7 +123,7 @@ function heroSpans(r: Readout, value: string, z: number, p: Palette): { spans: S
     const small = Math.round(z * 0.5)
     const num = value.slice(4)
     return {
-      spans: [{ text: 'hot', fill: p.muted, size: small, weight: 400 },{ text: num, fill: r.valueFill, dx: 4 }],
+      spans: [{ text: 'hot', fill: r.valueFill, size: small, weight: 400 },{ text: num, fill: r.valueFill, dx: 4 }],
       w: textW('hot', small) + 4 + textW(num, z),
     }
   }
@@ -220,7 +220,7 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
   const gap = W < 200 ? 7 : W < 420 ? 14 : 26
   const compact = W < 560
   const inner = W - pad * 2
-  const cache = cacheReadout(v, p)
+  const cache = cacheTone(cacheReadout(v, p), v, p)
   let body = ''
   // Hairline separators between blocks, fading top and bottom, only when there is room.
   const sep = (x: number) => gap >= 14 ? `<rect x="${r1(x)}" y="9" width="1" height="${H - 18}" fill="${p.divider}"/>` : ''
