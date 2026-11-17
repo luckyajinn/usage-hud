@@ -1,5 +1,5 @@
 // Presentation: turns a View into text segments. Pure, no engine calls.
-import { ttlMs } from './data'
+import { shownPercent, ttlMs } from './data'
 import type { CacheView, View, WindowView } from './data'
 
 export type Tone = 'normal' | 'warning' | 'error' | 'success' | 'dim' | 'track'
@@ -89,7 +89,8 @@ export function bar(fraction: number, width: number, fill: Tone): Seg[] {
 }
 
 function windowBar(w: WindowView, width: number): Seg[] {
-  if (w.state === 'ok' || w.state === 'stale') return bar(w.percentLeft / 100, width, barTone(w))
+  // The fill follows the shown percent: it drains as usage goes (remaining) or grows (used).
+  if (w.state === 'ok' || w.state === 'stale') return bar(shownPercent(w).percent / 100, width, barTone(w))
   return bar(0, width, 'dim')
 }
 
@@ -135,8 +136,9 @@ function bandWindow(w: WindowView, tier: Tier): Seg[] {
   if (w.state === 'na') return [...label, dim('n/a')]
   // A rolled window's old percent is wrong now: say reset instead, in every tier.
   if (w.state === 'rolled') return [...label, dim(tier === 1 ? 'has reset' : 'reset')]
-  const out: Seg[] = [...label, num(`${w.percentLeft}%`, percentTone(w))]
-  if (tier <= 2) out.push(dim(' left'))
+  const p = shownPercent(w)
+  const out: Seg[] = [...label, num(`${p.percent}%`, percentTone(w))]
+  if (tier <= 2) out.push(dim(' ' + p.word))
   out.push(...bandReset(w, tier))
   return out
 }
@@ -174,7 +176,7 @@ function barWindow(w: WindowView, width: number): Seg[] {
   if (w.state === 'na') return [...out, dim('n/a')]
   out.push(...windowBar(w, width))
   if (w.state === 'rolled') return [...out, dim(' reset')]
-  out.push(dim(' '), num(`${w.percentLeft}%`, percentTone(w)))
+  out.push(dim(' '), num(`${shownPercent(w).percent}%`, percentTone(w)))
   if (w.resetting) out.push(dim(' resetting'))
   else if (w.resetsInMs !== null) out.push(num(' ' + formatDuration(w.resetsInMs), 'dim'))
   return out
@@ -224,7 +226,8 @@ function commandWindow(w: WindowView): string {
   const name = LONG_LABEL[w.label]
   if (w.state === 'none') return `${name}: no reading yet`
   if (w.state === 'na') return `${name}: n/a (no subscription limits)`
-  let s = `${name}: ${w.percentLeft}% left`
+  const p = shownPercent(w)
+  let s = `${name}: ${p.percent}% ${p.word}`
   if (w.exceeded) s += ' (limit reached)'
   if (w.state === 'rolled') s += ', window has reset since'
   else if (w.resetting) s += ', resetting now'
