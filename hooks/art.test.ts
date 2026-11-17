@@ -181,6 +181,20 @@ test('alt is the command readout on one line', () => {
   expect(a).toContain('Cache state is an estimate.')
 })
 
+test('usage used: every look shows the percent used and the alt says used', () => {
+  const used = (w: WindowView): WindowView => ({ ...w, usage: 'used' }) as WindowView
+  const v = base({ fiveHour: used(win('5h', 72, 2 * H + 14 * M)), sevenDay: used(win('7d', 40, 3 * D + 4 * H)) })
+  expect(altText(v)).toContain('5-hour: 28% used, resets in 2h 14m 7-day: 60% used, resets in 3d 4h')
+  for (const theme of THEMES) for (const dark of [true, false]) {
+    const s = bandSvg(v, 99, theme, dark).source
+    expect(s).toContain('28%')
+    expect(s).toContain('60%')
+    expect(s.includes('72%')).toBe(false)
+    // The drawing changes with the option.
+    expect(s === bandSvg(base(), 99, theme, dark).source).toBe(false)
+  }
+})
+
 test('system fonts with tabular numbers, no embedded font, no animation', () => {
   for (const theme of THEMES) {
     const s = bandSvg(base(), 99, theme, true).source

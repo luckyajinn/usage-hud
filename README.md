@@ -2,8 +2,8 @@
 
 A Claude Code mod that shows your plan usage and prompt cache state while you work:
 
-- 5-hour window: bar, percent left, time until reset
-- 7-day window: bar, percent left, time until reset
+- 5-hour window: bar, percent left (or used), time until reset
+- 7-day window: bar, percent left (or used), time until reset
 - Prompt cache: hot with time left (bar drains toward cold), or cold
 
 It draws a one-line strip above the message box. Type `/usage-hud` to print the same readout as text.
@@ -34,6 +34,21 @@ Set it with `/plugin configure usage-hud@cj-mods` in a terminal session.
 Changed in 0.4.0: the default look changed from `christmas` to `terminal`, and the festive `christmas` look was removed. A saved value of `christmas` now falls back to the default look (`terminal`). The docked pane was removed too: the mod now shows only the strip above the message box, and `/usage-hud` only prints the readout as text.
 
 Changed in 0.4.1: the strip shows only the time until reset (for example `4h 50m`); the "as of" note is gone, and stale readings are dimmed instead. In midnight, paper, terminal, sunset and mono, the cache text is red while hot and blue when cold.
+
+## Left or used
+
+Option `usage`:
+
+- `remaining` (default): each limit shows how much is left, for example `72%`, and its bar drains as you use it.
+- `used`: each limit shows how much is spent, for example `28%`, and its bar fills up as you use it.
+
+The two always add up to 100. The colours stay tied to what is left either way: green above 50% left (under 50% used), amber from 20% to 50% left (50% to 80% used), red under 20% left (over 80% used). The cache always shows time left. `/usage-hud` says `left` or `used` after each percent, and so does the text strip at the widths where the word fits.
+
+```
+5h [###-------] 28% 2h 14m  |  7d [######----] 60% 3d 4h  |  Cache [#######---] hot 41m
+```
+
+Set it with `/plugin configure usage-hud@cj-mods` in a terminal session.
 
 ## Install
 

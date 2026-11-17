@@ -307,6 +307,35 @@ test('rolled and resetting windows', () => {
   expect(show(bandSegments(n, 99))).toBe('5h #######--- 72%  |  7d ####------ 40% 3d 4h  |  Cache #######--- hot 41m')
 })
 
+test('usage used: the band shows percent used, bars grow with use, colours follow percent left', () => {
+  const used = (w: WindowView): WindowView => ({ ...w, usage: 'used' }) as WindowView
+  const v = base({ fiveHour: used(win('5h', 72, 2 * H + 14 * M)), sevenDay: used(win('7d', 40, 3 * D + 4 * H)) })
+  expect(show(bandSegments(v, 99))).toBe('5h ###------- 28% 2h 14m  |  7d ######---- 60% 3d 4h  |  Cache #######--- hot 41m')
+  expect(show(bandSegments(v, 60))).toBe('5h 28% used 2h 14m | 7d 60% used 3d 4h | Cache hot 41m')
+  expect(show(bandSegments(v, 40))).toBe('5h 28% 2h14m | 7d 60% 3d4h | hot 41m')
+  expect(toneOf(bandSegments(v, 60), ' used')).toBe('dim')
+  // 72% left is still green and 40% left still amber, whichever number is shown.
+  expect(toneOf(bandSegments(v, 99), '28%')).toBe('normal')
+  expect(toneOf(bandSegments(v, 99), '60%')).toBe('warning')
+  expect(bars(bandSegments(v, 99)).map(s => [s.text.length, s.tone])).toEqual([
+    [3, 'success'], [7, 'track'], [6, 'warning'], [4, 'track'], [7, 'success'], [3, 'track'],
+  ])
+  // A spent window: a full red bar. Nothing used: an empty bar.
+  const spent = bandSegments(base({ fiveHour: used(win('5h', 0, H, { exceeded: true })) }), 99)
+  expect(show(spent).startsWith('5h ########## 100% 1h 0m  |')).toBe(true)
+  expect(bars(spent)[0]).toEqual({ text: ' '.repeat(10), tone: 'error', bar: true })
+  expect(show(bandSegments(base({ fiveHour: used(win('5h', 100, H)) }), 99)).startsWith('5h ---------- 0% 1h 0m  |')).toBe(true)
+  // Rolled, none and n/a read the same in both modes.
+  const ro = base({ fiveHour: used(win('5h', 72, null, { state: 'rolled', ageMs: 3 * H })) })
+  expect(show(bandSegments(ro, 99)).startsWith('5h ---------- reset  |')).toBe(true)
+  expect(commandText(v).split('\n').slice(0, 2)).toEqual([
+    '5-hour: 28% used, resets in 2h 14m',
+    '7-day: 60% used, resets in 3d 4h',
+  ])
+  const st = base({ fiveHour: used(win('5h', 0, 62 * M, { exceeded: true, state: 'stale', ageMs: 2 * M })) })
+  expect(commandText(st).split('\n')[0]).toBe('5-hour: 100% used (limit reached), resets in 1h 2m (as of 2m ago)')
+})
+
 test('commandText gives three lines and the estimate note', () => {
   expect(commandText(base())).toBe([
     '5-hour: 72% left, resets in 2h 14m',

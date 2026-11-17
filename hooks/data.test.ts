@@ -2,7 +2,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { CacheStamp, Limit, LimitsSnap } from '../types'
 import {
-  computeView, mergeSnap, nextWake, pickLimit, resolveTtl, stampFromResume, stampFromStep, ttlFromResume, ttlMs,
+  computeView, mergeSnap, nextWake, pickLimit, resolveTtl, shownPercent, stampFromResume, stampFromStep, ttlFromResume, ttlMs,
   type StepInfo, type ViewInput, type WindowView,
 } from './data'
 
@@ -72,7 +72,7 @@ test('none: live but limits null', () => {
 test('ok: live reading with percent, reset countdown and age', () => {
   const v = computeView(input({ live: true, limits: snap(NOW - 5 * SEC, 28, 60, NOW + 2 * HOUR, NOW + 3 * DAY) }))
   const f = full(v.fiveHour)
-  expect(f).toEqual({ label: '5h', state: 'ok', percentLeft: 72, exceeded: false, resetsInMs: 2 * HOUR, resetting: false, ageMs: 5 * SEC })
+  expect(f).toEqual({ label: '5h', state: 'ok', percentLeft: 72, usage: 'remaining', exceeded: false, resetsInMs: 2 * HOUR, resetting: false, ageMs: 5 * SEC })
   const s = full(v.sevenDay)
   expect(s.percentLeft).toBe(40)
   expect(s.resetsInMs).toBe(3 * DAY)
@@ -86,6 +86,27 @@ test('percentLeft floors and clamps to 0..100', () => {
   expect(pl(-5)).toBe(100)
   expect(pl(99.9)).toBe(0)
   expect(pl(150)).toBe(0)
+})
+
+test('usage option: remaining by default, used on request; shown used and left add to 100', () => {
+  const at = (p: number, usage?: 'remaining' | 'used') =>
+    full(computeView(input({ live: true, limits: snap(NOW, p), ...(usage ? { usage } : {}) })).fiveHour)
+  expect(at(27.5).usage).toBe('remaining')
+  expect(at(27.5, 'remaining').usage).toBe('remaining')
+  expect(at(27.5, 'used').usage).toBe('used')
+  // The left percent and the colours behind it do not change with the option.
+  expect(at(27.5, 'used').percentLeft).toBe(72)
+  expect(shownPercent(at(27.5))).toEqual({ percent: 72, word: 'left' })
+  expect(shownPercent(at(27.5, 'used'))).toEqual({ percent: 28, word: 'used' })
+  expect(shownPercent(at(0, 'used'))).toEqual({ percent: 0, word: 'used' })
+  expect(shownPercent(at(0.1, 'used'))).toEqual({ percent: 1, word: 'used' })
+  expect(shownPercent(at(130, 'used'))).toEqual({ percent: 100, word: 'used' })
+  expect(shownPercent(at(-5, 'used'))).toEqual({ percent: 0, word: 'used' })
+  for (const p of [0, 0.1, 27.5, 50, 99.9, 100, 150]) {
+    expect(shownPercent(at(p, 'used')).percent + shownPercent(at(p)).percent).toBe(100)
+  }
+  // A window built without the field reads as remaining.
+  expect(shownPercent({ percentLeft: 40 })).toEqual({ percent: 40, word: 'left' })
 })
 
 test('window past 100: 0 left, exceeded, countdown still shown (case 10)', () => {

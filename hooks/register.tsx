@@ -5,7 +5,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { CacheStamp, LimitsSnap, Ttl, TtlSetting } from '../types'
 import { computeView, mergeSnap, nextWake, pickLimit, resolveTtl, stampFromResume, stampFromStep, ttlFromResume } from './data'
-import type { View } from './data'
+import type { UsageShown, View } from './data'
 import { bandSegments, commandText } from './format'
 import { ART_THEMES, altText, bandSvg } from './art'
 import type { Art, ArtTheme } from './art'
@@ -32,6 +32,7 @@ function log($: $T, where: string, err?: unknown): void {
 
 const isSetting = (v: unknown): v is TtlSetting => v === 'auto' || v === '5m' || v === '1h'
 const isTtl = (v: unknown): v is Ttl => v === '5m' || v === '1h'
+const isUsage = (v: unknown): v is UsageShown => v === 'remaining' || v === 'used'
 type Theme = ArtTheme | 'text'
 const isTheme = (v: unknown): v is Theme => ART_THEMES.includes(v as ArtTheme) || v === 'text'
 /**
@@ -55,6 +56,7 @@ function toSnap(v: unknown): LimitsSnap | null {
 // Process-local facts (not in PluginState): a reload starts them over.
 let setting: TtlSetting = 'auto'
 let theme: Theme = 'terminal'
+let usage: UsageShown = 'remaining'
 let turnDone = false
 let timer: Timer | null = null
 
@@ -68,6 +70,7 @@ async function viewAt($: $T, now: number): Promise<{ view: View; limits: LimitsS
     cache: await read($, cacheA),
     model: await read($, modelA),
     ttl: resolveTtl(setting, await read($, ttlA)),
+    usage,
   })
   return { view, limits }
 }
@@ -127,6 +130,7 @@ async function learnTtl($: $T, t: Ttl | null): Promise<void> {
 export const register: Register = (on, options) => {
   setting = isSetting(options.cacheTtl) ? options.cacheTtl : 'auto'
   theme = isTheme(options.theme) ? options.theme : 'terminal'
+  usage = isUsage(options.usage) ? options.usage : 'remaining'
   turnDone = false
   timer?.cancel()
   timer = null

@@ -836,6 +836,35 @@ test('session.start never opens a pane, even with no surface listed yet', async 
   expect(logs).toEqual([])
 })
 
+test('usage used: the strip and /usage-hud show percent used', { options: { usage: 'used' } }, async ($, on) => {
+  engine(on, [])
+  await start($)
+  await measure($)
+  expect(await bandText($)).toBe('5h ###------- 28% 2h 14m  |  7d ######---- 60% 3d 4h  |  Cache ---------- cold')
+  const r = await readout($)
+  expect(r).toContain('5-hour: 28% used, resets in 2h 14m')
+  expect(r).toContain('7-day: 60% used')
+})
+
+test('usage remaining (the default) and a saved value outside the options read as left', { options: { usage: 'spent' as any } }, async ($, on) => {
+  engine(on, [])
+  await start($)
+  await measure($)
+  expect(await bandText($)).toBe(WIDE)
+  expect(await readout($)).toContain('5-hour: 72% left')
+})
+
+kitTest('usage used: the default look draws percent used and its alt says used', { options: { usage: 'used' } }, async ($, on) => {
+  engine(on, [])
+  await start($)
+  await measure($)
+  const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const svg = await b.find({ type: 'Svg' })
+  expect(String(svg?.props.source)).toContain('28%')
+  expect(svg?.props.alt).toContain('5-hour: 28% used, resets in 2h 14m 7-day: 60% used')
+  await b.unmount()
+})
+
 test('/usage-hud answers text and does not open a pane', async ($, on) => {
   const { opens } = engine(on, [])
   await start($)

@@ -1,11 +1,15 @@
 // Pure data rules for usage-hud (PLAN sections 5 and 6). No `$`, no engine calls.
 import type { CacheStamp, Limit, LimitsSnap, Ttl, TtlSetting } from '../types'
 
+/** What the windows show: the percent left (remaining, the default) or the percent used. */
+export type UsageShown = 'remaining' | 'used'
+
 export type WindowView =
   | { label: '5h' | '7d'; state: 'none' }                 // no reading at all
   | { label: '5h' | '7d'; state: 'na' }                   // no subscription limits
   | { label: '5h' | '7d'; state: 'ok' | 'stale' | 'rolled';
       percentLeft: number;        // integer 0..100, floor(100 - percentUsed) clamped
+      usage: UsageShown;          // which percent the strip and readout show (see shownPercent)
       exceeded: boolean;          // percentUsed >= 100
       resetsInMs: number | null;  // null when resetsAt missing or state 'rolled'
       resetting: boolean;         // resetsAt within 60 s in the past
@@ -23,6 +27,7 @@ export type ViewInput = {
   cache: CacheStamp | null
   model: string | null     // current main model (last main step), null = unknown
   ttl: Ttl
+  usage?: UsageShown       // default 'remaining'
 }
 
 // Step info for stamping: t0 = epoch ms at request start.
@@ -89,7 +94,17 @@ function windowView(label: '5h' | '7d', i: ViewInput, na: boolean): WindowView {
   const resetting = r !== null && past >= 0 && past <= RESET_GRACE_MS
   const state = rolled ? 'rolled' : i.live && ageMs <= FRESH_MS ? 'ok' : 'stale'
   const resetsInMs = r === null || rolled ? null : Math.max(0, r - i.now)
-  return { label, state, percentLeft, exceeded, resetsInMs, resetting, ageMs }
+  const usage: UsageShown = i.usage === 'used' ? 'used' : 'remaining'
+  return { label, state, percentLeft, usage, exceeded, resetsInMs, resetting, ageMs }
+}
+
+/**
+ * The percent a reading shows and the word after it. Used is 100 minus left, so the two
+ * always add to 100 and the colour thresholds (which follow the percent left) line up.
+ */
+export function shownPercent(w: { percentLeft: number; usage?: UsageShown }): { percent: number; word: 'left' | 'used' } {
+  if (w.usage === 'used') return { percent: 100 - w.percentLeft, word: 'used' }
+  return { percent: w.percentLeft, word: 'left' }
 }
 
 function cacheView(i: ViewInput): CacheView {

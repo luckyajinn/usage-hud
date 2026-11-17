@@ -1,7 +1,7 @@
 {
   "name": "usage-hud",
   "version": "0.4.1",
-  "description": "Shows 5-hour and 7-day usage left with reset times, and whether the prompt cache is hot or cold",
+  "description": "Shows 5-hour and 7-day usage (left or used) with reset times, and whether the prompt cache is hot or cold",
   "author": {
     "name": "CJ"
   },
@@ -34,6 +34,16 @@
         "text"
       ],
       "default": "terminal"
+    },
+    "usage": {
+      "type": "string",
+      "title": "Show usage as",
+      "description": "remaining shows how much of each limit is left (72% left); used shows how much is spent (28% used). The bars follow the same choice. The cache always shows time left.",
+      "options": [
+        "remaining",
+        "used"
+      ],
+      "default": "remaining"
     }
   },
   "repository": "https://github.com/luckyajinn/usage-hud",

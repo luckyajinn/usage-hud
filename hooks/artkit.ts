@@ -2,7 +2,7 @@
 // draws (what each block says), fitting helpers, the constants of the surfaces,
 // and the small baseline drawing helpers (pill bar, panel frame) the quiet themes share.
 // Themes import this file (and ./data, ./format) and nothing else from the art code.
-import { ttlMs } from './data'
+import { shownPercent, ttlMs } from './data'
 import type { CacheView, View, WindowView } from './data'
 import { formatDuration } from './format'
 
@@ -121,9 +121,11 @@ export function windowReadout(w: WindowView, p: Palette): Readout {
   if (w.resetting) detail = 'resetting now'
   else if (w.resetsInMs !== null) detail = 'resets in ' + formatDuration(w.resetsInMs)
   if (w.exceeded) detail = detail ? 'limit reached, ' + detail : 'limit reached'
+  // The colour (fill) follows the percent left; the number and bar follow the usage option.
+  const shown = shownPercent(w)
   return {
-    ...base, value: `${w.percentLeft}%`, unit: 'left', valueFill, detail,
-    frac: w.percentLeft / 100, fill, dim: w.state !== 'ok',
+    ...base, value: `${shown.percent}%`, unit: shown.word, valueFill, detail,
+    frac: shown.percent / 100, fill, dim: w.state !== 'ok',
   }
 }
 
