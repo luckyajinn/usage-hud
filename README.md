@@ -35,6 +35,8 @@ Changed in 0.4.0: the default look changed from `christmas` to `terminal`, and t
 
 Changed in 0.4.1: the strip shows only the time until reset (for example `4h 50m`); the "as of" note is gone, and stale readings are dimmed instead. In midnight, paper, terminal, sunset and mono, the cache text is red while hot and blue when cold.
 
+Changed in 0.5.0: new option `usage` (see Left or used below). Each limit can show its percent left (the default, as before) or its percent used.
+
 ## Left or used
 
 Option `usage`:
