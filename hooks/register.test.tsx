@@ -929,7 +929,7 @@ const countAttach = (on: On) => {
 }
 
 // Every art look; the loops below run for each, so a new look is covered by listing it here.
-const ART_LOOKS = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono'] as const
+const ART_LOOKS = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono', 'flat', 'pips'] as const
 
 for (const theme of ART_LOOKS) {
   kitTest(`${theme}: the desktop band draws Svg with the readout as alt`, { options: { theme } }, async ($, on) => {
@@ -1013,7 +1013,7 @@ kitTest('a saved theme of christmas (removed in 0.4.0) falls back to the default
   await t.unmount()
 })
 
-for (const theme of ['midnight', 'paper', 'terminal', 'sunset', 'mono'] as const) {
+for (const theme of ['midnight', 'paper', 'terminal', 'sunset', 'mono', 'flat', 'pips'] as const) {
   kitTest(`explicit theme ${theme} draws its own svg on the desktop`, { options: { theme } }, async ($, on) => {
     engine(on, [])
     await start($)
