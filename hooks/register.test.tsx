@@ -948,7 +948,9 @@ for (const theme of ART_LOOKS) {
     expect(svg?.props.alt).toBe(
       '5-hour: 72% left, resets in 2h 14m 7-day: 40% left, resets in 3d 4h Cache: cold (new) Cache state is an estimate.',
     )
-    expect(await b.find({ type: 'Text' })).toBe(undefined)
+    // The mod draws no Text beside its Svg. Since 2.1.330 the kit stacks every plugin's part
+    // of the slot, so the test engine's own "engine" Text sits next to it; that one is not ours.
+    expect((await b.findAll({ type: 'Text' })).filter(t => t.text !== 'engine')).toEqual([])
     await b.unmount()
     // No pane: a Pane render is not the mod's, so it draws no Svg and the engine answers.
     const p = await $.ui.mount({ ...pane('dock', 64), surface: 'desktop' })
