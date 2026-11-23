@@ -1,6 +1,6 @@
 {
   "name": "usage-hud",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Shows 5-hour and 7-day usage (left or used) with reset times, and whether the prompt cache is hot or cold",
   "author": {
     "name": "CJ"
@@ -46,6 +46,16 @@
         "used"
       ],
       "default": "remaining"
+    },
+    "keepWarm": {
+      "type": "string",
+      "title": "Keep cache warm",
+      "description": "on sends one short \"warm\" message into the chat when the hot prompt cache is under 5 minutes from expiring (1 minute on a 5m cache), so it stays warm. Each warm is a real turn and counts toward your usage. At most 3 in a row while you are away; typing anything starts the count over. Skipped when a limit is reached or nearly reached.",
+      "options": [
+        "off",
+        "on"
+      ],
+      "default": "off"
     }
   },
   "repository": "https://github.com/luckyajinn/usage-hud",

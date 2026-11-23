@@ -4,7 +4,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { CacheStamp, LimitsSnap, Ttl, TtlSetting } from '../types'
-import { computeView, mergeSnap, nextWake, pickLimit, resolveTtl, stampFromResume, stampFromStep, ttlFromResume } from './data'
+import { computeView, mergeSnap, nextWake, pickLimit, resolveTtl, stampFromResume, stampFromStep, ttlFromResume, ttlMs } from './data'
 import type { UsageShown, View } from './data'
 import { bandSegments, commandText } from './format'
 import { ART_THEMES, altText, bandSvg } from './art'
@@ -60,6 +60,29 @@ let usage: UsageShown = 'remaining'
 let turnDone = false
 let timer: Timer | null = null
 
+// ---- keep warm (option keepWarm, off by default) ----
+// When the hot cache gets near its end, send one short framed prompt into this chat so the
+// model's reply reads the cache and restarts its lifetime. Guards: once per cache stamp, never
+// while a main turn runs, never on a cold cache or with a limit reached or nearly reached, and
+// at most WARM_MAX in a row: any prompt that is not ours (the person typing) resets the count.
+let keepWarm = false
+let warmTimer: Timer | null = null
+let warmTarget: number | null = null
+let warmedFor: number | null = null
+let warms = 0
+let busy = false
+export const WARM_MAX = 3
+export const WARM_TEXT = 'warm (usage-hud keeping the prompt cache warm: reply with only "ok", no tools)'
+const MIN_MS = 60_000
+/** How long before the cache ends the warm goes: 5 minutes, or a fifth of a shorter lifetime. */
+export const warmLead = (ttlMsValue: number): number => Math.min(5 * MIN_MS, ttlMsValue / 5)
+/**
+ * A limit reached, or 5% or less left: do not spend usage on keeping the cache warm. A stale
+ * reading counts (it is the latest there is); a window that has since reset ('rolled') does not.
+ */
+const limitsLow = (v: View): boolean =>
+  [v.fiveHour, v.sevenDay].some(w => (w.state === 'ok' || w.state === 'stale') && (w.exceeded || w.percentLeft <= 5))
+
 async function viewAt($: $T, now: number): Promise<{ view: View; limits: LimitsSnap | null }> {
   const limits = await read($, limitsA)
   const view = computeView({
@@ -97,6 +120,49 @@ async function schedule($: $T): Promise<void> {
   timer = $.clock.after(wait, () => {
     void wake($)
   })
+  planWarm($, view, now)
+}
+
+// One warm timer, set for when the cache gets near its end. The redraw timer replans it often
+// (every second near the end in the text look), so a timer already set for the same moment is
+// kept; a moment already past warms now.
+function planWarm($: $T, view: View, now: number): void {
+  if (!keepWarm || view.cache.state !== 'hot') {
+    warmTimer?.cancel()
+    warmTimer = null
+    warmTarget = null
+    return
+  }
+  const target = Math.round((now + view.cache.leftMs - warmLead(ttlMs(view.ttl))) / 1000) * 1000
+  if (warmTimer !== null && warmTarget === target) return
+  warmTimer?.cancel()
+  warmTimer = null
+  warmTarget = target
+  if (target <= now) {
+    void warm($)
+    return
+  }
+  warmTimer = $.clock.after(target - now, () => {
+    warmTimer = null
+    void warm($)
+  })
+}
+
+async function warm($: $T): Promise<void> {
+  try {
+    if (!keepWarm || busy || warms >= WARM_MAX) return
+    const { view } = await viewAt($, await $.clock.now())
+    if (view.cache.state !== 'hot' || limitsLow(view)) return
+    if (view.cache.leftMs > warmLead(ttlMs(view.ttl)) + 1000) return
+    const stamp = await read($, cacheA)
+    if (stamp === null || warmedFor === stamp.at) return
+    warmedFor = stamp.at
+    warms += 1
+    const r = await $.prompt.submit({ text: WARM_TEXT })
+    if (r.drop !== undefined) log($, 'keep warm dropped')
+  } catch (err) {
+    log($, 'keep warm', err)
+  }
 }
 
 async function wake($: $T): Promise<void> {
@@ -131,9 +197,16 @@ export const register: Register = (on, options) => {
   setting = isSetting(options.cacheTtl) ? options.cacheTtl : 'auto'
   theme = isTheme(options.theme) ? options.theme : 'terminal'
   usage = isUsage(options.usage) ? options.usage : 'remaining'
+  keepWarm = options.keepWarm === 'on'
   turnDone = false
   timer?.cancel()
   timer = null
+  warmTimer?.cancel()
+  warmTimer = null
+  warmTarget = null
+  warmedFor = null
+  warms = 0
+  busy = false
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -295,6 +368,25 @@ export const register: Register = (on, options) => {
     }
     return r
   })
+
+  // Keep warm bookkeeping: a main turn running, and who sent each prompt.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) busy = true
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    busy = false
+    return r
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    const r = await next(e)
+    // Anything but our own warm (the person typing, a notification, a peer) starts the count over.
+    if (!(e.origin?.kind === 'plugin' && e.origin.name === 'usage-hud')) warms = 0
+    return r
+  }).catch(($, e, next) => next(e))
 
   // Answers its own command only; never reads next.
   on('command.run', { command: 'usage-hud' }, async $ => {

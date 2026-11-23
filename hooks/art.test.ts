@@ -476,3 +476,16 @@ test('cache tones: clean and classic are left as they were', () => {
     expect(palette(theme, true).coldBlue).toBeUndefined()
   }
 })
+
+// ---- pips: cache squares red while hot, all ten blue when cold ----
+
+test('pips: hot cache squares are hotRed, a cold cache lights all ten in coldBlue', () => {
+  for (const dark of [true, false]) {
+    const p = palette('pips', dark)
+    const rects = (svg: string, c: string) => (svg.match(new RegExp(`<rect [^>]*fill="${c}"`, 'g')) ?? []).length
+    const hotSvg = bandSvg(base({ cache: hot(41 * M) }), 99, 'pips', dark).source
+    expect(rects(hotSvg, p.hotRed!)).toBeGreaterThan(0)
+    const coldSvg = bandSvg(base({ cache: { state: 'cold', reason: 'expired' } }), 99, 'pips', dark).source
+    expect(rects(coldSvg, p.coldBlue!)).toBe(10)
+  }
+})
