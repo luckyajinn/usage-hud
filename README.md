@@ -39,6 +39,8 @@ Changed in 0.4.1: the strip shows only the time until reset (for example `4h 50m
 
 Changed in 0.5.0: new option `usage` (see Left or used below). Each limit can show its percent left (the default, as before) or its percent used.
 
+Changed in 0.6.0: two new simple looks, `flat` and `pips` (see the list above). The default look is still `terminal`.
+
 ## Left or used
 
 Option `usage`:
