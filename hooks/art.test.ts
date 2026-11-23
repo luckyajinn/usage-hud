@@ -56,7 +56,7 @@ function wellFormed(svg: string): boolean {
 }
 
 // Every art theme: the generic tests below run against each, so a new look is covered by listing it here.
-const THEMES: ArtTheme[] = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono']
+const THEMES: ArtTheme[] = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono', 'flat', 'pips']
 
 test('every state, theme, scheme and width draws well-formed SVG under 20 KB', () => {
   for (const theme of THEMES) for (const dark of [true, false]) for (const [k, v] of Object.entries(STATES)) {
