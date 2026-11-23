@@ -19,11 +19,12 @@ import * as sunset from './themes/sunset'
 import * as mono from './themes/mono'
 import * as flat from './themes/flat'
 import * as pips from './themes/pips'
+import * as squares from './themes/squares'
 
 export { BAND_CELL_PX, BAND_H, esc, textW } from './artkit'
 export type { Art, Palette } from './artkit'
 
-export type ArtTheme = 'clean' | 'classic' | 'midnight' | 'paper' | 'terminal' | 'sunset' | 'mono' | 'flat' | 'pips'
+export type ArtTheme = 'clean' | 'classic' | 'midnight' | 'paper' | 'terminal' | 'sunset' | 'mono' | 'flat' | 'pips' | 'squares'
 
 /** What a look module exports. `W` is the finished pixel width (art.ts clamps it). */
 type ThemeModule = {
@@ -135,7 +136,7 @@ const classic: ThemeModule = { ID_TAG: 'c', palette: classicPalette, band: class
 
 // ---- dispatch ----
 
-const THEMES: Record<ArtTheme, ThemeModule> = { clean, classic, midnight, paper, terminal, sunset, mono, flat, pips }
+const THEMES: Record<ArtTheme, ThemeModule> = { clean, classic, midnight, paper, terminal, sunset, mono, flat, pips, squares }
 
 /** Every art theme name, in the order the settings list them. */
 export const ART_THEMES = Object.keys(THEMES) as ArtTheme[]

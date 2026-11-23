@@ -56,7 +56,7 @@ function wellFormed(svg: string): boolean {
 }
 
 // Every art theme: the generic tests below run against each, so a new look is covered by listing it here.
-const THEMES: ArtTheme[] = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono', 'flat', 'pips']
+const THEMES: ArtTheme[] = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono', 'flat', 'pips', 'squares']
 
 test('every state, theme, scheme and width draws well-formed SVG under 20 KB', () => {
   for (const theme of THEMES) for (const dark of [true, false]) for (const [k, v] of Object.entries(STATES)) {
@@ -99,6 +99,8 @@ test('every state renders its label in the band', () => {
   for (const theme of THEMES) for (const [k, v] of Object.entries(STATES)) {
     const band = words(bandSvg(v, 99, theme, true).source)
     for (const w of want[k]!) {
+      // squares gives the reset time up for big squares at this width (by design; /usage-hud has it).
+      if (theme === 'squares' && w === '2h 14m') continue
       if (!band.includes(w) && !(k === 'na' && w === 'Limits n/a')) throw new Error(`band ${theme} ${k} lacks ${w}: ${band}`)
     }
   }
@@ -479,13 +481,23 @@ test('cache tones: clean and classic are left as they were', () => {
 
 // ---- pips: cache squares red while hot, all ten blue when cold ----
 
-test('pips: hot cache squares are hotRed, a cold cache lights all ten in coldBlue', () => {
-  for (const dark of [true, false]) {
-    const p = palette('pips', dark)
+test('pips and squares: hot cache pips are hotRed, a cold cache lights all ten in coldBlue', () => {
+  for (const theme of ['pips', 'squares'] as ArtTheme[]) for (const dark of [true, false]) {
+    const p = palette(theme, dark)
     const rects = (svg: string, c: string) => (svg.match(new RegExp(`<rect [^>]*fill="${c}"`, 'g')) ?? []).length
-    const hotSvg = bandSvg(base({ cache: hot(41 * M) }), 99, 'pips', dark).source
+    const hotSvg = bandSvg(base({ cache: hot(41 * M) }), 99, theme, dark).source
     expect(rects(hotSvg, p.hotRed!)).toBeGreaterThan(0)
-    const coldSvg = bandSvg(base({ cache: { state: 'cold', reason: 'expired' } }), 99, 'pips', dark).source
+    const coldSvg = bandSvg(base({ cache: { state: 'cold', reason: 'expired' } }), 99, theme, dark).source
     expect(rects(coldSvg, p.coldBlue!)).toBe(10)
   }
+})
+
+test('pips draws bars taller than wide at 99 columns; squares draws squares of 11 px or more', () => {
+  const sizes = (svg: string) => [...svg.matchAll(/<rect x="[^"]+" y="[^"]+" width="([\d.]+)" height="([\d.]+)" rx/g)].map(m => [Number(m[1]), Number(m[2])])
+  const sq = sizes(bandSvg(base({ cache: hot(41 * M) }), 99, 'squares', true).source)
+  expect(sq.length).toBe(30)
+  for (const [w, h] of sq) { expect(w).toBeGreaterThanOrEqual(11); expect(h).toBe(w) }
+  const tall = sizes(bandSvg(base({ cache: hot(41 * M) }), 99, 'pips', true).source)
+  expect(tall.length).toBe(30)
+  for (const [w, h] of tall) expect(h).toBeGreaterThan(w * 1.5)
 })
