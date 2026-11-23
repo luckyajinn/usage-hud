@@ -26,7 +26,7 @@ Option `theme`:
 - `sunset`: warm gradient bars on a plum-to-indigo card.
 - `mono`: ultra-minimal monochrome, a marker on a hairline instead of a bar.
 - `flat`: the quietest look: no card and no bars. One line of text per block (label, number, reset time) with a small coloured dot as the only colour.
-- `pips`: ten small squares per block, like a battery meter, lit for the amount (or, with `usage` set to `used`, the amount used), then the percent and reset time.
+- `pips`: ten squares per block, like a battery meter, lit for the amount (or, with `usage` set to `used`, the amount used), then the percent and reset time. The cache squares are red while hot (draining as its time runs out) and all blue when cold.
 - `text`: the text look shown above, everywhere.
 
 The terminal always draws the text look. The strip is drawn in dark colours (the app does not tell a mod whether it is in light or dark mode). It shows whole minutes and redraws at most once a minute; only the text look counts down seconds in the last 10 minutes of the cache.
@@ -40,6 +40,8 @@ Changed in 0.4.1: the strip shows only the time until reset (for example `4h 50m
 Changed in 0.5.0: new option `usage` (see Left or used below). Each limit can show its percent left (the default, as before) or its percent used.
 
 Changed in 0.6.0: two new simple looks, `flat` and `pips` (see the list above). The default look is still `terminal`.
+
+Changed in 0.6.1: `pips` draws bigger squares, and its cache squares are red while hot and all blue when cold.
 
 ## Left or used
 

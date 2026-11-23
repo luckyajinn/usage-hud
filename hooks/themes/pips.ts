@@ -2,8 +2,9 @@
 // no card chrome, and each block on one centred line: a small muted label, a row of ten small
 // rounded squares (pips) lit for the amount shown, then the percent and the reset time in
 // regular weight. Lit pips carry the colour: green above 50% left, amber 20-50, red under 20,
-// grey when stale, a calm blue for the hot cache (all unlit when cold). Unlit pips are a faint
-// track. A reached limit tints its unlit pips red so the block still says so at a glance.
+// grey when stale. The cache pips are red while hot (draining as its time runs out) and all ten
+// blue when cold. Unlit pips are a faint track. A reached limit tints its unlit pips red so the
+// block still says so at a glance.
 import type { View, WindowView } from '../data'
 import {
   BAND_H, FONT, bandTail, cacheReadout, esc, fillPaint, fitText, limitsNa, r1, text, textW, windowReadout,
@@ -21,6 +22,7 @@ const DARK: Palette = {
   track: '#2e3136', good: '#46c37b', mid: '#e8a93a', low: '#f0625d', stale: '#6a7079',
   midText: '#e8eaed', lowText: '#ff8a85',
   frost: '#5aa9f0', hotText: '#e8eaed',
+  hotRed: '#f26a5f', coldBlue: '#5aa9f0',
 }
 const LIGHT: Palette = {
   panel: '#ffffff', panel2: '#ffffff', border: '#ffffff', divider: '#eceef1',
@@ -28,6 +30,7 @@ const LIGHT: Palette = {
   track: '#e2e5e9', good: '#1f9d57', mid: '#d48a00', low: '#d93a35', stale: '#a7adb5',
   midText: '#1d2025', lowText: '#c42b26',
   frost: '#2f7fd1', hotText: '#1d2025',
+  hotRed: '#d93a35', coldBlue: '#2f7fd1',
 }
 /** The faint red the unlit pips of a reached limit take (mixed over the panel by opacity). */
 const REACHED_OPACITY = 0.32
@@ -62,10 +65,12 @@ const pipsW = (g: Pip, one = false) => (one ? g.size : g.size * PIPS + g.gap * (
  * Ten rounded squares centred on `cy`: the first `lit` in the fill colour, the rest track.
  * With `one`, a single status pip: lit in the fill colour when anything is left.
  */
-function pips(x: number, cy: number, g: Pip, b: Block, p: Palette, one = false): string {
+function pips(x: number, cy: number, g: Pip, b: Block, p: Palette, v: View, one = false): string {
   const count = one ? 1 : PIPS
-  const lit = b.r.fill === 'none' ? 0 : one ? Math.min(1, litCount(b.r.frac)) : litCount(b.r.frac)
-  const on = fillPaint(b.r.fill, p)
+  // The cache: red pips while hot (also in its last minute), every pip blue when cold.
+  const cold = b.isCache && v.cache.state === 'cold'
+  const lit = cold ? count : b.r.fill === 'none' ? 0 : one ? Math.min(1, litCount(b.r.frac)) : litCount(b.r.frac)
+  const on = b.isCache ? (cold ? p.coldBlue! : p.hotRed!) : fillPaint(b.r.fill, p)
   const y = cy - g.size / 2
   const rx = r1(Math.max(1, g.size * 0.28))
   let s = ''
@@ -142,7 +147,7 @@ function choiceW(b: Block, c: Choice, g: Pip): number {
 const tailFill = (t: string, p: Palette) => (t.startsWith('limit reached') ? p.lowText : p.muted)
 
 /** Draws one block from `x`: label, pips, value, tail, all on the one centre line. */
-function drawBlock(x: number, b: Block, c: Choice, g: Pip, p: Palette): string {
+function drawBlock(x: number, b: Block, c: Choice, g: Pip, p: Palette, v: View): string {
   const gp = gaps(g)
   let at = x
   let s = ''
@@ -150,7 +155,7 @@ function drawBlock(x: number, b: Block, c: Choice, g: Pip, p: Palette): string {
     s += text(at, BASE - 0.5, [{ text: b.label, fill: p.muted }], { size: LABEL_Z, weight: 500 })
     at += textW(b.label, LABEL_Z) + gp.label
   }
-  s += pips(at, CY, g, b, p, c.one)
+  s += pips(at, CY, g, b, p, v, c.one)
   at += pipsW(g, c.one) + gp.pips
   const spans: Span[] = [{ text: c.value, fill: p.text }]
   // A cold cache reads as one phrase: "cold, expired".
@@ -160,6 +165,9 @@ function drawBlock(x: number, b: Block, c: Choice, g: Pip, p: Palette): string {
   return b.r.dim ? `<g opacity=".7">${s}</g>` : s
 }
 
+const P10: Pip = { size: 10, gap: 3 }
+const P9: Pip = { size: 9, gap: 2.5 }
+const P8: Pip = { size: 8, gap: 2.5 }
 const P7: Pip = { size: 7, gap: 2.5 }
 const P6: Pip = { size: 6, gap: 2 }
 const P5: Pip = { size: 5, gap: 2 }
@@ -171,7 +179,7 @@ const P3: Pip = { size: 3, gap: 1 }
  * each row becomes one status pip, and the label goes last of all.
  */
 const LADDER: [Pip, number][] = [
-  [P7, 0], [P6, 0], [P7, 1], [P6, 1], [P5, 1], [P6, 2], [P5, 2], [P5, 3], [P5, 4], [P4, 4], [P6, 5], [P5, 6],
+  [P10, 0], [P9, 0], [P8, 0], [P7, 0], [P6, 0], [P9, 1], [P8, 1], [P7, 1], [P6, 1], [P5, 1], [P6, 2], [P5, 2], [P5, 3], [P5, 4], [P4, 4], [P6, 5], [P5, 6],
 ]
 
 /** The strip above the prompt. `W` is the finished pixel width; `idTag` is the svg id letter. */
@@ -224,7 +232,7 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
   let x = edge
   blocks.forEach((b, i) => {
     const c = opts[i]![pick[i]!]!
-    if (widths[i]! <= W - pad * 2) body += drawBlock(x, b, c, g, p)
+    if (widths[i]! <= W - pad * 2) body += drawBlock(x, b, c, g, p, v)
     else {
       // Far too narrow for pips: the value alone, cut to fit.
       const t = fitText(c.value, VALUE_Z, 7, (W - pad * 2) / n)
