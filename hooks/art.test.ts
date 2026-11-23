@@ -56,7 +56,7 @@ function wellFormed(svg: string): boolean {
 }
 
 // Every art theme: the generic tests below run against each, so a new look is covered by listing it here.
-const THEMES: ArtTheme[] = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono', 'flat', 'pips', 'squares']
+const THEMES: ArtTheme[] = ['clean', 'paper', 'terminal', 'sunset', 'flat', 'pips', 'squares']
 
 test('every state, theme, scheme and width draws well-formed SVG under 20 KB', () => {
   for (const theme of THEMES) for (const dark of [true, false]) for (const [k, v] of Object.entries(STATES)) {
@@ -124,14 +124,6 @@ test('text placed in the SVG is escaped', () => {
   expect(esc(`a&b<c>d"e'f`)).toBe('a&amp;b&lt;c&gt;d&quot;e&#39;f')
 })
 
-test('classic bar fills: solid green over 50, amber 20 to 50, red under 20', () => {
-  const q = palette('classic', true)
-  const cl = (pl: number) => bandSvg(base({ fiveHour: win('5h', pl, H) }), 99, 'classic', true).source
-  expect(cl(80)).toContain(`fill="${q.good}"`)
-  expect(cl(40)).toContain(`fill="${q.mid}"`)
-  expect(cl(10)).toContain(`fill="${q.low}"`)
-})
-
 test('palettes switch with the theme and with dark or light', () => {
   const panels = new Set<string>()
   for (const theme of THEMES) {
@@ -142,9 +134,9 @@ test('palettes switch with the theme and with dark or light', () => {
       expect(bandSvg(base(), 99, theme, dark).source).toContain(`stop-color="${p.panel}"`)
     }
   }
-  // At least classic dark, clean dark and the white light panel they share.
+  // At least clean dark, paper dark and a light panel.
   expect(panels.size >= 3).toBe(true)
-  expect(palette('classic', true).panel).not.toBe(palette('clean', true).panel)
+  expect(palette('paper', true).panel).not.toBe(palette('clean', true).panel)
 })
 
 // WCAG contrast of each text colour against the panel.
@@ -205,7 +197,7 @@ test('system fonts with tabular numbers, no embedded font, no animation', () => 
     for (const k of ['@font-face', '<animate', '<script', 'base64']) expect(s.includes(k)).toBe(false)
   }
   // The default stack, for the looks that use it.
-  for (const theme of ['clean', 'classic'] as const) {
+  for (const theme of ['clean'] as const) {
     expect(bandSvg(base(), 99, theme, true).source).toContain('font-family="system-ui, &#39;Segoe UI&#39;, sans-serif"')
   }
 })
@@ -348,15 +340,13 @@ test('gradient ids are unique per theme and scheme, and every url() resolves', (
   expect([...owner].filter(([, k]) => k.startsWith('clean/')).length).toBe(2)
 })
 
-test('svg ids keep their pinned letters: n for clean, c for classic, one letter per theme', () => {
+test('svg ids keep their pinned letters: n for clean, one letter per theme', () => {
   const tag = (theme: ArtTheme, dark: boolean): string => {
     const a = bandSvg(base(), 99, theme, dark)
     return /id="uh(\w)([dl])bP"/.exec(a.source)!.slice(1).join('')
   }
   expect(tag('clean', true)).toBe('nd')
   expect(tag('clean', false)).toBe('nl')
-  expect(tag('classic', true)).toBe('cd')
-  expect(tag('classic', false)).toBe('cl')
   expect(new Set(THEMES.map(t => tag(t, true)[0])).size).toBe(THEMES.length)
 })
 
@@ -433,7 +423,7 @@ test('clean: text colours keep 4.5:1 against the panel in dark and light', () =>
 
 // ---- cache tones: hot cache text red, cold cache text blue (the five newer looks only) ----
 
-const TONED: ArtTheme[] = ['midnight', 'paper', 'terminal', 'sunset', 'mono']
+const TONED: ArtTheme[] = ['paper', 'terminal', 'sunset']
 
 /** The fills of every tspan whose text matches `re`. */
 const fillsOf = (svg: string, re: RegExp): string[] =>
@@ -472,8 +462,8 @@ test('cache tones: the limit numbers keep their own colours', () => {
   }
 })
 
-test('cache tones: clean and classic are left as they were', () => {
-  for (const theme of ['clean', 'classic'] as ArtTheme[]) {
+test('cache tones: clean is left as it was', () => {
+  for (const theme of ['clean'] as ArtTheme[]) {
     expect(palette(theme, true).hotRed).toBeUndefined()
     expect(palette(theme, true).coldBlue).toBeUndefined()
   }
@@ -493,7 +483,8 @@ test('pips and squares: hot cache pips are hotRed, a cold cache lights all ten i
 })
 
 test('pips draws bars taller than wide at 99 columns; squares draws squares of 11 px or more', () => {
-  const sizes = (svg: string) => [...svg.matchAll(/<rect x="[^"]+" y="[^"]+" width="([\d.]+)" height="([\d.]+)" rx/g)].map(m => [Number(m[1]), Number(m[2])])
+  const sizes = (svg: string): [number, number][] =>
+    [...svg.matchAll(/<rect x="[^"]+" y="[^"]+" width="([\d.]+)" height="([\d.]+)" rx/g)].map(m => [Number(m[1]), Number(m[2])])
   const sq = sizes(bandSvg(base({ cache: hot(41 * M) }), 99, 'squares', true).source)
   expect(sq.length).toBe(30)
   for (const [w, h] of sq) { expect(w).toBeGreaterThanOrEqual(11); expect(h).toBe(w) }

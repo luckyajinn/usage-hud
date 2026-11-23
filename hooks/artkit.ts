@@ -162,7 +162,7 @@ export function bandTail(r: Readout, isCache: boolean): string {
   return [r.detail.replace(/^resets in /, ''), r.extra].filter(t => t).join(', ')
 }
 
-// ---- baseline drawing helpers (used by the clean and classic looks) ----
+// ---- baseline drawing helpers (used by the clean look) ----
 
 /** The solid colour of a bar fill, or 'none'. */
 export function fillPaint(f: Fill, p: Palette): string {

@@ -30,14 +30,6 @@ Option `theme`:
 
   ![clean](docs/screenshots/clean.png)
 
-- `classic`: the older neutral card with solid green, amber and red bars.
-
-  ![classic](docs/screenshots/classic.png)
-
-- `midnight`: deep navy glass with a neon accent.
-
-  ![midnight](docs/screenshots/midnight.png)
-
 - `paper`: a warm editorial card with serif numerals and ruled-scale bars.
 
   ![paper](docs/screenshots/paper.png)
@@ -45,10 +37,6 @@ Option `theme`:
 - `sunset`: warm gradient bars on a plum-to-indigo card.
 
   ![sunset](docs/screenshots/sunset.png)
-
-- `mono`: ultra-minimal monochrome, a marker on a hairline instead of a bar.
-
-  ![mono](docs/screenshots/mono.png)
 
 - `flat`: the quietest look: no card and no bars. One line of text per block (label, number, reset time) with a small coloured dot as the only colour.
 
@@ -88,7 +76,7 @@ Changed in 0.6.0: two new simple looks, `flat` and `pips` (see the list above). 
 
 Changed in 0.7.0: new option `keepWarm` (see Keep warm below), off by default. `pips` draws bigger squares, and its cache squares are red while hot and all blue when cold.
 
-Changed in 0.8.0: `pips` draws tall bars, about twice as tall as before, and keeps every word. The big squares are a new look, `squares`. Screenshots of every look are in `docs/screenshots`.
+Changed in 0.8.0: `pips` draws tall bars, about twice as tall as before, and keeps every word. The big squares are a new look, `squares`. The `classic`, `midnight` and `mono` looks were removed; a saved value of any of them now falls back to the default look (`terminal`). Screenshots of every look are in `docs/screenshots`.
 
 ## Left or used
 
