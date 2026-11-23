@@ -8,6 +8,10 @@ A Claude Code mod that shows your plan usage and prompt cache state while you wo
 
 It draws a one-line strip above the message box. Type `/usage-hud` to print the same readout as text.
 
+![usage-hud with the pips look](docs/screenshots/pips.png)
+
+In a terminal it draws the same readout as text:
+
 ```
 5h [##########] 98% 2h 56m  |  7d [##########] 100% 6d 23h  |  Cache [#########-] hot 52m
 ```
@@ -19,15 +23,44 @@ Bars are green above 50% left, amber from 20% to 50%, red under 20%. Readings ol
 Option `theme`:
 
 - `terminal` (default): a monospace phosphor strip: a near-black panel with faint scanlines, prompt-style labels (`5h>`, `7d>`, `cache>`) and bars made of blocks like `[#######---]`; green above 50% left, amber from 20% to 50%, red under 20%.
+
+  ![terminal](docs/screenshots/terminal.png)
+
 - `clean`: a minimal card: a quiet dark panel with a large percent-left number for each limit, a thin solid bar and a small status dot beside each label. No decoration.
-- `classic`: the older neutral card with solid green, amber and red bars.
-- `midnight`: deep navy glass with a neon accent.
+
+  ![clean](docs/screenshots/clean.png)
+
 - `paper`: a warm editorial card with serif numerals and ruled-scale bars.
+
+  ![paper](docs/screenshots/paper.png)
+
 - `sunset`: warm gradient bars on a plum-to-indigo card.
-- `mono`: ultra-minimal monochrome, a marker on a hairline instead of a bar.
+
+  ![sunset](docs/screenshots/sunset.png)
+
 - `flat`: the quietest look: no card and no bars. One line of text per block (label, number, reset time) with a small coloured dot as the only colour.
-- `pips`: ten squares per block, like a battery meter, lit for the amount (or, with `usage` set to `used`, the amount used), then the percent and reset time. The cache squares are red while hot (draining as its time runs out) and all blue when cold.
+
+  ![flat](docs/screenshots/flat.png)
+
+- `pips`: ten tall bars per block, like a battery meter, lit for the amount (or, with `usage` set to `used`, the amount used), then the percent and reset time. The cache bars are red while hot (draining as its time runs out) and all blue when cold. On a narrow window the bars become small squares.
+
+  ![pips](docs/screenshots/pips.png)
+
+- `squares`: the pips look with big squares instead of tall bars. Big squares take width, so at the usual desktop width the reset time gives way to them; it comes back when the window is wide enough, and `/usage-hud` always shows it.
+
+  ![squares](docs/screenshots/squares.png)
+
 - `text`: the text look shown above, everywhere.
+
+The pips look in other states:
+
+| State | Strip |
+|---|---|
+| Running low, cache nearly cold | ![pips running low](docs/screenshots/pips-warning.png) |
+| 5-hour limit reached, cache cold | ![pips limit reached](docs/screenshots/pips-limit.png) |
+| `usage` set to `used` | ![pips in used mode](docs/screenshots/pips-used.png) |
+
+Screenshots are the desktop strip at 99 columns (742 px), dark.
 
 The terminal always draws the text look. The strip is drawn in dark colours (the app does not tell a mod whether it is in light or dark mode). It shows whole minutes and redraws at most once a minute; only the text look counts down seconds in the last 10 minutes of the cache.
 
@@ -42,6 +75,8 @@ Changed in 0.5.0: new option `usage` (see Left or used below). Each limit can sh
 Changed in 0.6.0: two new simple looks, `flat` and `pips` (see the list above). The default look is still `terminal`.
 
 Changed in 0.7.0: new option `keepWarm` (see Keep warm below), off by default. `pips` draws bigger squares, and its cache squares are red while hot and all blue when cold.
+
+Changed in 0.8.0: `pips` draws tall bars, about twice as tall as before, and keeps every word. The big squares are a new look, `squares`. The `classic`, `midnight` and `mono` looks were removed; a saved value of any of them now falls back to the default look (`terminal`). Screenshots of every look are in `docs/screenshots`.
 
 ## Left or used
 

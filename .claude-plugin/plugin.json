@@ -1,6 +1,6 @@
 {
   "name": "usage-hud",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Shows 5-hour and 7-day usage (left or used) with reset times, and whether the prompt cache is hot or cold",
   "author": {
     "name": "CJ"
@@ -22,17 +22,15 @@
     "theme": {
       "type": "string",
       "title": "Look",
-      "description": "terminal is the default look (monospace phosphor strip) drawn in the desktop app, mobile and VS Code; clean is a minimal card; classic is the older neutral card; midnight, paper, sunset and mono are alternative looks; flat and pips are simple looks; text draws text everywhere. The terminal app always draws text.",
+      "description": "terminal is the default look (monospace phosphor strip) drawn in the desktop app, mobile and VS Code; clean is a minimal card; paper and sunset are alternative looks; flat, pips and squares are simple looks; text draws text everywhere. The terminal app always draws text.",
       "options": [
         "terminal",
         "clean",
-        "classic",
-        "midnight",
         "paper",
         "sunset",
-        "mono",
         "flat",
         "pips",
+        "squares",
         "text"
       ],
       "default": "terminal"

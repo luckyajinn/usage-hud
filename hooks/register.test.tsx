@@ -929,7 +929,7 @@ const countAttach = (on: On) => {
 }
 
 // Every art look; the loops below run for each, so a new look is covered by listing it here.
-const ART_LOOKS = ['clean', 'classic', 'midnight', 'paper', 'terminal', 'sunset', 'mono', 'flat', 'pips'] as const
+const ART_LOOKS = ['clean', 'paper', 'terminal', 'sunset', 'flat', 'pips', 'squares'] as const
 
 for (const theme of ART_LOOKS) {
   kitTest(`${theme}: the desktop band draws Svg with the readout as alt`, { options: { theme } }, async ($, on) => {
@@ -1000,6 +1000,17 @@ kitTest('explicit theme clean draws Svg on the desktop and Text on the terminal'
   await t.unmount()
 })
 
+for (const gone of ['classic', 'midnight', 'mono'] as const) {
+  kitTest(`a saved theme of ${gone} (removed in 0.8.0) falls back to the default terminal look`, { options: { theme: gone as any } }, async ($, on) => {
+    engine(on, LIMITS)
+    await start($)
+    await measure($)
+    const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
+    expect(String((await b.find({ type: 'Svg' }))?.props.source)).toContain(DEFAULT_ID)
+    await b.unmount()
+  })
+}
+
 kitTest('a saved theme of christmas (removed in 0.4.0) falls back to the default terminal look', { options: { theme: 'christmas' as any } }, async ($, on) => {
   engine(on, LIMITS, {}, ['desktop', 'terminal'])
   await start($)
@@ -1015,7 +1026,7 @@ kitTest('a saved theme of christmas (removed in 0.4.0) falls back to the default
   await t.unmount()
 })
 
-for (const theme of ['midnight', 'paper', 'terminal', 'sunset', 'mono', 'flat', 'pips'] as const) {
+for (const theme of ['paper', 'terminal', 'sunset', 'flat', 'pips', 'squares'] as const) {
   kitTest(`explicit theme ${theme} draws its own svg on the desktop`, { options: { theme } }, async ($, on) => {
     engine(on, [])
     await start($)
@@ -1387,7 +1398,8 @@ test('keep warm stops after 3 in a row; a prompt of the person\'s starts the cou
     await step($)
   }
   expect(sent).toEqual([WARM, WARM, WARM])
-  await $.prompt.submit({ text: 'back again' })
+  // The person typing: a composer prompt.
+  await $.prompt.submit({ text: 'back again', wait: false, origin: { kind: 'composer' } })
   await step($)
   await clock.advance(55 * MIN + 1000)
   expect(sent).toEqual([WARM, WARM, WARM, 'back again', WARM])

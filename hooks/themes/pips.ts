@@ -1,6 +1,6 @@
 // The pips look. Simple and friendly, like a battery or signal indicator: a flat ground with
-// no card chrome, and each block on one centred line: a small muted label, a row of ten small
-// rounded squares (pips) lit for the amount shown, then the percent and the reset time in
+// no card chrome, and each block on one centred line: a small muted label, a row of ten tall
+// rounded bars (pips; plain squares when the strip is narrow) lit for the amount shown, then the percent and the reset time in
 // regular weight. Lit pips carry the colour: green above 50% left, amber 20-50, red under 20,
 // grey when stale. The cache pips are red while hot (draining as its time runs out) and all ten
 // blue when cold. Unlit pips are a faint track. A reached limit tints its unlit pips red so the
@@ -58,7 +58,8 @@ export function litCount(frac: number): number {
   return Math.min(PIPS, Math.max(1, Math.round(f * PIPS)))
 }
 
-type Pip = { size: number; gap: number }
+/** One pip: `size` is its width (and height, unless `h` makes it a tall bar); `gap` between pips. */
+export type Pip = { size: number; gap: number; h?: number }
 const pipsW = (g: Pip, one = false) => (one ? g.size : g.size * PIPS + g.gap * (PIPS - 1))
 
 /**
@@ -71,7 +72,8 @@ function pips(x: number, cy: number, g: Pip, b: Block, p: Palette, v: View, one 
   const cold = b.isCache && v.cache.state === 'cold'
   const lit = cold ? count : b.r.fill === 'none' ? 0 : one ? Math.min(1, litCount(b.r.frac)) : litCount(b.r.frac)
   const on = b.isCache ? (cold ? p.coldBlue! : p.hotRed!) : fillPaint(b.r.fill, p)
-  const y = cy - g.size / 2
+  const ph = g.h ?? g.size
+  const y = cy - ph / 2
   const rx = r1(Math.max(1, g.size * 0.28))
   let s = ''
   for (let i = 0; i < count; i++) {
@@ -79,7 +81,7 @@ function pips(x: number, cy: number, g: Pip, b: Block, p: Palette, v: View, one 
     const isOn = i < lit
     const fill = isOn ? on : b.reached ? p.low : p.track
     const op = !isOn && b.reached ? ` fill-opacity="${REACHED_OPACITY}"` : ''
-    s += `<rect x="${r1(px)}" y="${r1(y)}" width="${g.size}" height="${g.size}" rx="${rx}" fill="${fill}"${op}/>`
+    s += `<rect x="${r1(px)}" y="${r1(y)}" width="${g.size}" height="${ph}" rx="${rx}" fill="${fill}"${op}/>`
   }
   return s
 }
@@ -165,6 +167,9 @@ function drawBlock(x: number, b: Block, c: Choice, g: Pip, p: Palette, v: View):
   return b.r.dim ? `<g opacity=".7">${s}</g>` : s
 }
 
+const P13: Pip = { size: 13, gap: 3 }
+const P12: Pip = { size: 12, gap: 3 }
+const P11: Pip = { size: 11, gap: 2.5 }
 const P10: Pip = { size: 10, gap: 3 }
 const P9: Pip = { size: 9, gap: 2.5 }
 const P8: Pip = { size: 8, gap: 2.5 }
@@ -173,17 +178,36 @@ const P6: Pip = { size: 6, gap: 2 }
 const P5: Pip = { size: 5, gap: 2 }
 const P4: Pip = { size: 4, gap: 1.5 }
 const P3: Pip = { size: 3, gap: 1 }
+/** A rung of the narrowing ladder: the pip, and the deepest level a block may drop to. */
+export type Ladder = [Pip, number][]
+
 /**
- * The narrowing ladder: (pip size, deepest level a block may drop to). The reset time goes
- * before the pips shrink much, the unit word before the label; when even 4 px pips do not fit
+ * The squares ladder (the squares look): big squares first, even at the cost of the reset time
+ * (level 2), then the smaller squares with the reset time back. When even 4 px pips do not fit
  * each row becomes one status pip, and the label goes last of all.
  */
-const LADDER: [Pip, number][] = [
+export const SQUARE_LADDER: Ladder = [
+  [P13, 0], [P12, 0], [P13, 2], [P12, 2], [P11, 2],
   [P10, 0], [P9, 0], [P8, 0], [P7, 0], [P6, 0], [P9, 1], [P8, 1], [P7, 1], [P6, 1], [P5, 1], [P6, 2], [P5, 2], [P5, 3], [P5, 4], [P4, 4], [P6, 5], [P5, 6],
+]
+
+/**
+ * The pips ladder: tall rounded bars (about twice as tall as wide) that keep every word, then
+ * the squares' smaller rungs as the strip narrows.
+ */
+export const TALL_LADDER: Ladder = [
+  [{ size: 9, gap: 2.5, h: 18 }, 0], [{ size: 8, gap: 2.5, h: 17 }, 0], [{ size: 7, gap: 2, h: 16 }, 0],
+  [{ size: 6, gap: 2, h: 15 }, 0], [{ size: 7, gap: 2, h: 16 }, 1], [{ size: 6, gap: 2, h: 15 }, 1],
+  ...SQUARE_LADDER.slice(5),
 ]
 
 /** The strip above the prompt. `W` is the finished pixel width; `idTag` is the svg id letter. */
 export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG): Art {
+  return pipsBand(v, W, dark, idTag, TALL_LADDER)
+}
+
+/** The pips drawing with a given ladder: shared by the pips and squares looks. */
+export function pipsBand(v: View, W: number, dark: boolean, idTag: string, ladder: Ladder): Art {
   const p = palette(dark)
   const id = 'uh' + idTag + (dark ? 'd' : 'l') + 'b'
   const H = BAND_H
@@ -203,7 +227,7 @@ export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG):
   // Walk the ladder; at each step narrow the widest group one option at a time until all fit.
   let g = P3
   let pick: number[] = blocks.map(() => opts[0]!.length - 1)
-  for (const [pg, deepest] of LADDER) {
+  for (const [pg, deepest] of ladder) {
     const at = blocks.map(() => 0)
     const w = (i: number) => choiceW(blocks[i]!, opts[i]![at[i]!]!, pg)
     const total = () => blocks.reduce((s, _, i) => s + w(i), 0)
