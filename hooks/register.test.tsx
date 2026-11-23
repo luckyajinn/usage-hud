@@ -1322,3 +1322,102 @@ kitTest(`R12 ${theme}: privacy: art themes log nothing and store only limits`, {
   await b.unmount()
 })
 }
+
+// ---- keep warm (option keepWarm) ----
+
+const WARM = 'warm (usage-hud keeping the prompt cache warm: reply with only "ok", no tools)'
+
+// Records every prompt that reaches the engine; turn.start answered so the mod can watch turns.
+const prompts = (on: On) => {
+  const sent: string[] = []
+  on('prompt.submit', (_, e) => {
+    sent.push(e.text)
+    return { text: e.text }
+  })
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  return sent
+}
+
+test('keep warm is off by default: nothing is sent as the cache runs out', async ($, on) => {
+  const { clock } = engine(on, LIMITS)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  const sent = prompts(on)
+  await start($)
+  await step($)
+  await clock.advance(59 * MIN)
+  expect(sent).toEqual([])
+})
+
+test('keep warm on: one warm when the 1h cache is under 5 minutes, not before', { options: { keepWarm: 'on' } }, async ($, on) => {
+  const { clock } = engine(on, LIMITS)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  const sent = prompts(on)
+  await start($)
+  await step($)
+  await clock.advance(54 * MIN)
+  expect(sent).toEqual([])
+  await clock.advance(MIN + 1000)
+  expect(sent).toEqual([WARM])
+  // Once per cache stamp: no second warm before the cache is refreshed.
+  await clock.advance(2 * MIN)
+  expect(sent).toEqual([WARM])
+})
+
+test('keep warm on a 5m cache: warms with 1 minute left', { options: { keepWarm: 'on', cacheTtl: '5m' } }, async ($, on) => {
+  const { clock } = engine(on, LIMITS)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  const sent = prompts(on)
+  await start($)
+  await step($)
+  await clock.advance(3 * MIN + 50_000)
+  expect(sent).toEqual([])
+  await clock.advance(11_000)
+  expect(sent).toEqual([WARM])
+})
+
+test('keep warm stops after 3 in a row; a prompt of the person\'s starts the count over', { options: { keepWarm: 'on' } }, async ($, on) => {
+  const { clock } = engine(on, LIMITS)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  const sent = prompts(on)
+  await start($)
+  await step($)
+  for (let i = 1; i <= 4; i++) {
+    await clock.advance(55 * MIN + 1000)
+    // The warm's reply reads the cache: a fresh stamp.
+    await step($)
+  }
+  expect(sent).toEqual([WARM, WARM, WARM])
+  await $.prompt.submit({ text: 'back again' })
+  await step($)
+  await clock.advance(55 * MIN + 1000)
+  expect(sent).toEqual([WARM, WARM, WARM, 'back again', WARM])
+})
+
+test('keep warm waits while a turn runs', { options: { keepWarm: 'on' } }, async ($, on) => {
+  const { clock } = engine(on, LIMITS)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  const sent = prompts(on)
+  await start($)
+  await step($)
+  await $.turn.start({ text: 'long job', turnId: 'busy1' })
+  await clock.advance(56 * MIN)
+  expect(sent).toEqual([])
+})
+
+test('keep warm skips a cold cache and a nearly spent limit', { options: { keepWarm: 'on' } }, async ($, on) => {
+  const low: SessionUsage['rateLimits'] = [
+    { kind: 'five_hour', percentUsed: 97, resetsAt: new Date(NOW + 2 * H).toISOString() },
+    { kind: 'seven_day', percentUsed: 60, resetsAt: new Date(NOW + 76 * H).toISOString() },
+  ]
+  const { clock } = engine(on, low)
+  answerSteps(on, { read: 9000, creation: 0, input: 10 })
+  const sent = prompts(on)
+  await start($)
+  await measure($, low)
+  await step($)
+  await clock.advance(56 * MIN)
+  expect(sent).toEqual([])
+  // Cold: nothing to keep warm.
+  await clock.advance(10 * MIN)
+  expect(sent).toEqual([])
+})
