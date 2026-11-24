@@ -279,17 +279,17 @@ test('pips: hot cache pips are hotRed, a cold cache lights all ten in coldBlue',
   }
 })
 
-test('pips: bars at 99 columns are tall (21 px) and widen to fill the strip', () => {
+test('pips: bars at 99 columns are tall (22.5 px) and widen to fill the strip', () => {
   const sizes = (svg: string): [number, number][] =>
     [...svg.matchAll(/<rect x="[^"]+" y="[^"]+" width="([\d.]+)" height="([\d.]+)" rx/g)].map(m => [Number(m[1]), Number(m[2])])
   const full = sizes(bandSvg(base({ cache: hot(41 * M) }), 99, true).source)
   expect(full.length).toBe(30)
-  for (const [w, h] of full) { expect(h).toBe(21); expect(w).toBeGreaterThanOrEqual(6); expect(w).toBeLessThanOrEqual(12.6) }
+  for (const [w, h] of full) { expect(h).toBe(22.5); expect(w).toBeGreaterThanOrEqual(6); expect(w).toBeLessThanOrEqual(13.5) }
   // Longer words (a cold cache, a reached limit) may take a rung down, still tall.
   for (const v of [STATES.cold!, STATES.exceeded!]) {
     const bars = sizes(bandSvg(v, 99, true).source)
     expect(bars.length).toBe(30)
-    for (const [w, h] of bars) expect(h).toBeGreaterThanOrEqual(17.5)
+    for (const [w, h] of bars) expect(h).toBeGreaterThanOrEqual(20)
   }
   // Narrower, the bars stay tall: the words give way first.
   for (const [w, h] of sizes(bandSvg(base({ cache: hot(41 * M) }), 56, true).source)) expect(h).toBeGreaterThan(w * 1.5)

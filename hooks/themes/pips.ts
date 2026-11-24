@@ -191,13 +191,13 @@ const SQUARE_LADDER: Ladder = [
  * drop words before they shrink; the squares only on a very narrow strip.
  */
 const LADDER: Ladder = [
-  // Full height (21 px) while every word fits; the width here is the least the bars start
+  // Full height (22.5 px) while every word fits; the width here is the least the bars start
   // from, since they widen afterwards into the room left over.
-  [{ size: 9, gap: 2.5, h: 21 }, 0], [{ size: 8, gap: 2.5, h: 21 }, 0], [{ size: 7, gap: 2, h: 21 }, 0],
-  [{ size: 6, gap: 2, h: 21 }, 0], [{ size: 7, gap: 2, h: 21 }, 1], [{ size: 6, gap: 2, h: 21 }, 1],
+  [{ size: 9, gap: 2.5, h: 22.5 }, 0], [{ size: 8, gap: 2.5, h: 22.5 }, 0], [{ size: 7, gap: 2, h: 22.5 }, 0],
+  [{ size: 6, gap: 2, h: 22.5 }, 0], [{ size: 7, gap: 2, h: 22.5 }, 1], [{ size: 6, gap: 2, h: 22.5 }, 1],
   // Narrower: the bars stay tall while the reset time, then the unit word, then "hot" give way.
-  [{ size: 6, gap: 2, h: 19 }, 2], [{ size: 5, gap: 1.5, h: 18 }, 2], [{ size: 5, gap: 1.5, h: 18 }, 3],
-  [{ size: 5, gap: 1.5, h: 18 }, 4], [{ size: 4, gap: 1.5, h: 16 }, 4], [{ size: 3, gap: 1, h: 15 }, 4],
+  [{ size: 6, gap: 2, h: 20.5 }, 2], [{ size: 5, gap: 1.5, h: 19.5 }, 2], [{ size: 5, gap: 1.5, h: 19.5 }, 3],
+  [{ size: 5, gap: 1.5, h: 19.5 }, 4], [{ size: 4, gap: 1.5, h: 17 }, 4], [{ size: 3, gap: 1, h: 16 }, 4],
   ...SQUARE_LADDER,
 ]
 

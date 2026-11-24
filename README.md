@@ -45,7 +45,7 @@ Changed in 0.7.0: new option `keepWarm` (see Keep warm below), off by default. `
 
 Changed in 0.8.0: `pips` draws tall bars, about twice as tall as before, and keeps every word. The big squares are a new look, `squares`. The `classic`, `midnight` and `mono` looks were removed; a saved value of any of them now falls back to the default look (`terminal`). Screenshots of every look are in `docs/screenshots`.
 
-Changed in 0.9.0: pips is the only look. The `theme` option is gone, and with it `terminal`, `clean`, `paper`, `sunset`, `flat`, `squares` and `text`; a saved `theme` value is ignored and the desktop draws pips. The terminal still draws the text strip. The pips bars are about 15% taller (21 px), the text is a size larger, and the bars widen to fill the strip.
+Changed in 0.9.0: pips is the only look. The `theme` option is gone, and with it `terminal`, `clean`, `paper`, `sunset`, `flat`, `squares` and `text`; a saved `theme` value is ignored and the desktop draws pips. The terminal still draws the text strip. The pips bars are 25% taller (22.5 px), the text is a size larger, and the bars widen to fill the strip.
 
 ## Left or used
 
