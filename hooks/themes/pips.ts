@@ -89,9 +89,9 @@ function pips(x: number, cy: number, g: Pip, b: Block, p: Palette, v: View, one 
 // ---- layout ----
 
 const CY = BAND_H / 2
-const LABEL_Z = 11
-const VALUE_Z = 13
-const TAIL_Z = 12
+const LABEL_Z = 12
+const VALUE_Z = 14
+const TAIL_Z = 13
 /** Space after the label, after the pips, and before the tail. */
 const GAP_LABEL = 7
 const GAP_PIPS = 9
@@ -116,14 +116,14 @@ function options(b: Block): Choice[] {
   // The short tail keeps only the time ("limit reached" is also said by the red-tinted pips).
   const short = b.isCache ? full : r.detail.replace(/^.*resets in /, '').replace(/^limit reached$/, '')
   const bare = b.isCache && r.value.startsWith('hot ') ? r.value.slice(4) : r.value
-  // A reached limit keeps its percent (0%) like every other look, and says "limit reached"
-  // in words while there is room; the narrower levels fall back to the time only.
+  // A reached limit keeps its percent (0%) and says "limit reached" with the time while there
+  // is room; one level narrower it keeps the words and lets the time go.
   const first: Choice = b.reached
     ? { level: 0, label: true, value: r.value, tail: r.detail.replace(/resets in /, '') }
     : { level: 0, label: true, value: unit, tail: full }
   const all: Choice[] = [
     first,
-    { level: 1, label: true, value: unit, tail: short },
+    b.reached ? { level: 1, label: true, value: r.value, tail: 'limit reached' } : { level: 1, label: true, value: unit, tail: short },
     { level: 2, label: true, value: unit, tail: '' },
     { level: 3, label: true, value: r.value, tail: '' },
     { level: 4, label: true, value: bare, tail: '' },
@@ -167,9 +167,6 @@ function drawBlock(x: number, b: Block, c: Choice, g: Pip, p: Palette, v: View):
   return b.r.dim ? `<g opacity=".7">${s}</g>` : s
 }
 
-const P13: Pip = { size: 13, gap: 3 }
-const P12: Pip = { size: 12, gap: 3 }
-const P11: Pip = { size: 11, gap: 2.5 }
 const P10: Pip = { size: 10, gap: 3 }
 const P9: Pip = { size: 9, gap: 2.5 }
 const P8: Pip = { size: 8, gap: 2.5 }
@@ -179,35 +176,33 @@ const P5: Pip = { size: 5, gap: 2 }
 const P4: Pip = { size: 4, gap: 1.5 }
 const P3: Pip = { size: 3, gap: 1 }
 /** A rung of the narrowing ladder: the pip, and the deepest level a block may drop to. */
-export type Ladder = [Pip, number][]
+type Ladder = [Pip, number][]
 
 /**
- * The squares ladder (the squares look): big squares first, even at the cost of the reset time
- * (level 2), then the smaller squares with the reset time back. When even 4 px pips do not fit
- * each row becomes one status pip, and the label goes last of all.
+ * The squares the bars fall back to on a very narrow strip. When even 4 px pips do not fit each
+ * row becomes one status pip, and the label goes last of all.
  */
-export const SQUARE_LADDER: Ladder = [
-  [P13, 0], [P12, 0], [P13, 2], [P12, 2], [P11, 2],
+const SQUARE_LADDER: Ladder = [
   [P10, 0], [P9, 0], [P8, 0], [P7, 0], [P6, 0], [P9, 1], [P8, 1], [P7, 1], [P6, 1], [P5, 1], [P6, 2], [P5, 2], [P5, 3], [P5, 4], [P4, 4], [P6, 5], [P5, 6],
 ]
 
 /**
  * The pips ladder: tall rounded bars (about twice as tall as wide) that keep every word, then
- * the squares' smaller rungs as the strip narrows.
+ * drop words before they shrink; the squares only on a very narrow strip.
  */
-export const TALL_LADDER: Ladder = [
-  [{ size: 9, gap: 2.5, h: 18 }, 0], [{ size: 8, gap: 2.5, h: 17 }, 0], [{ size: 7, gap: 2, h: 16 }, 0],
-  [{ size: 6, gap: 2, h: 15 }, 0], [{ size: 7, gap: 2, h: 16 }, 1], [{ size: 6, gap: 2, h: 15 }, 1],
-  ...SQUARE_LADDER.slice(5),
+const LADDER: Ladder = [
+  // Full height (21 px) while every word fits; the width here is the least the bars start
+  // from, since they widen afterwards into the room left over.
+  [{ size: 9, gap: 2.5, h: 21 }, 0], [{ size: 8, gap: 2.5, h: 21 }, 0], [{ size: 7, gap: 2, h: 21 }, 0],
+  [{ size: 6, gap: 2, h: 21 }, 0], [{ size: 7, gap: 2, h: 21 }, 1], [{ size: 6, gap: 2, h: 21 }, 1],
+  // Narrower: the bars stay tall while the reset time, then the unit word, then "hot" give way.
+  [{ size: 6, gap: 2, h: 19 }, 2], [{ size: 5, gap: 1.5, h: 18 }, 2], [{ size: 5, gap: 1.5, h: 18 }, 3],
+  [{ size: 5, gap: 1.5, h: 18 }, 4], [{ size: 4, gap: 1.5, h: 16 }, 4], [{ size: 3, gap: 1, h: 15 }, 4],
+  ...SQUARE_LADDER,
 ]
 
 /** The strip above the prompt. `W` is the finished pixel width; `idTag` is the svg id letter. */
 export function band(v: View, W: number, dark: boolean, idTag: string = ID_TAG): Art {
-  return pipsBand(v, W, dark, idTag, TALL_LADDER)
-}
-
-/** The pips drawing with a given ladder: shared by the pips and squares looks. */
-export function pipsBand(v: View, W: number, dark: boolean, idTag: string, ladder: Ladder): Art {
   const p = palette(dark)
   const id = 'uh' + idTag + (dark ? 'd' : 'l') + 'b'
   const H = BAND_H
@@ -227,7 +222,7 @@ export function pipsBand(v: View, W: number, dark: boolean, idTag: string, ladde
   // Walk the ladder; at each step narrow the widest group one option at a time until all fit.
   let g = P3
   let pick: number[] = blocks.map(() => opts[0]!.length - 1)
-  for (const [pg, deepest] of ladder) {
+  for (const [pg, deepest] of LADDER) {
     const at = blocks.map(() => 0)
     const w = (i: number) => choiceW(blocks[i]!, opts[i]![at[i]!]!, pg)
     const total = () => blocks.reduce((s, _, i) => s + w(i), 0)
@@ -246,6 +241,16 @@ export function pipsBand(v: View, W: number, dark: boolean, idTag: string, ladde
     if (total() <= room) break
   }
 
+  // Fill the strip: tall bars widen into the room left over (up to about 0.6 of their height),
+  // so the meters, not empty gaps, take the width.
+  if (g.h !== undefined) {
+    const used = blocks.reduce((s, b, i) => s + choiceW(b, opts[i]![pick[i]!]!, g), 0)
+    const spare = room - used
+    const count = blocks.reduce((s, _, i) => s + (opts[i]![pick[i]!]!.one ? 1 : PIPS), 0)
+    // 70% of the spare room goes to the bars; the rest stays as space between the blocks.
+    if (spare > 0) g = { ...g, size: r1(Math.min(g.h * 0.6, g.size + (spare * 0.7) / count)) }
+  }
+
   // Even spacing: the same space at both ends and between blocks, but never under the minimums.
   const widths = blocks.map((b, i) => choiceW(b, opts[i]![pick[i]!]!, g))
   const sum = widths.reduce((s, x) => s + x, 0)
@@ -253,15 +258,18 @@ export function pipsBand(v: View, W: number, dark: boolean, idTag: string, ladde
   let edge = space
   if (space < minGap || space < pad) { edge = pad; space = Math.max(0, (W - pad * 2 - sum) / (n - 1)) }
   let body = ''
+  if (sum > W - pad * 2) {
+    // Far too narrow for pips: each block's value alone, cut to fit its share of the strip.
+    const col = (W - pad * 2) / n
+    blocks.forEach((b, i) => {
+      const t = fitText(opts[i]![pick[i]!]!.value, VALUE_Z, 6, col - 4)
+      body += text(pad + i * col, BASE, [{ text: t.text, fill: p.text }], { size: t.size })
+    })
+    return { source: ground(W, H, p, id, body), width: W, height: H }
+  }
   let x = edge
   blocks.forEach((b, i) => {
-    const c = opts[i]![pick[i]!]!
-    if (widths[i]! <= W - pad * 2) body += drawBlock(x, b, c, g, p, v)
-    else {
-      // Far too narrow for pips: the value alone, cut to fit.
-      const t = fitText(c.value, VALUE_Z, 7, (W - pad * 2) / n)
-      body += text(x, BASE, [{ text: t.text, fill: p.text }], { size: t.size })
-    }
+    body += drawBlock(x, b, opts[i]![pick[i]!]!, g, p, v)
     x += widths[i]! + space
   })
   return { source: ground(W, H, p, id, body), width: W, height: H }

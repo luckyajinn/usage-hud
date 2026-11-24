@@ -2,11 +2,21 @@ import { expect, mock, test as kitTest } from 'claude-code/testing'
 import type { Engine, TestBody, TestOptions } from 'claude-code/testing'
 import type { On, SessionUsage } from 'claude-code'
 
-// The tests below written for the text look run with theme 'text' unless they say
-// otherwise; the art tests at the end use kitTest with the manifest default (terminal).
+// The tests below written for the text strip run on the terminal surface, where the text
+// strip draws (the desktop draws the pips art): `test` sets TEXT, so the engine lists only the
+// terminal unless a test says otherwise. The art tests at the end use kitTest on the desktop.
+let TEXT = false
 function test(name: string, a: TestOptions | TestBody, b?: TestBody): void {
-  if (typeof a === 'function') kitTest(name, { options: { theme: 'text' } }, a)
-  else kitTest(name, { ...a, options: { theme: 'text', ...a.options } }, b!)
+  const opts = typeof a === 'function' ? {} : a
+  const body = typeof a === 'function' ? a : b!
+  kitTest(name, opts, async ($, on) => {
+    TEXT = true
+    try {
+      await body($, on)
+    } finally {
+      TEXT = false
+    }
+  })
 }
 
 const NOW = Date.parse('2026-11-02T12:00:00Z')
@@ -47,7 +57,7 @@ const engine = (
   on: On,
   rateLimits: SessionUsage['rateLimits'],
   store: Record<string, unknown> = {},
-  surfaces: ('desktop' | 'terminal')[] = ['desktop'],
+  surfaces: ('desktop' | 'terminal')[] = TEXT ? ['terminal'] : ['desktop'],
 ) => {
   const clock = mock.clock(on, { now: NOW })
   const mem: Record<string, unknown> = JSON.parse(JSON.stringify(store))
@@ -136,7 +146,7 @@ const answerSteps = (on: On, q: Usage[] | Usage) => {
   return () => calls
 }
 
-const start = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop') =>
+const start = ($: Engine, surface: 'desktop' | 'terminal' = TEXT ? 'terminal' : 'desktop') =>
   $.session.start({ cwd: '/', surface, isInteractive: true })
 
 const measure = ($: Engine, rateLimits: SessionUsage['rateLimits'] = LIMITS, changed: ('rateLimits')[] = ['rateLimits']) =>
@@ -198,7 +208,7 @@ const shown = async (ui: Ui) => (await rowsOf(ui)).join('')
 const barsOf = async (ui: Ui) => (await ui.findAll({ type: 'Text' })).filter(t => t.props.backgroundColor !== undefined)
 
 const bandText = async ($: Engine, cols = 99) => {
-  const ui = await $.ui.mount({ ...band(cols), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(cols), surface: 'terminal' })
   const t = await shown(ui)
   await ui.unmount()
   return t
@@ -214,11 +224,11 @@ const readout = async ($: Engine) => (await runCommand($)).text
 
 // ---- drawing ----
 
-test('band draws on desktop and terminal, tier by width', async ($, on) => {
+test('band draws on the terminal, tier by width', async ($, on) => {
   engine(on, [])
   await start($)
   await measure($)
-  for (const surface of ['terminal', 'desktop'] as const) {
+  for (const surface of ['terminal'] as const) {
     const wide = await $.ui.mount({ ...band(80), surface })
     expect(await shown(wide)).toBe(WIDE)
     const pct = await wide.find({ type: 'Text', text: '40%' })
@@ -239,7 +249,7 @@ test('band yields to a survey', async ($, on) => {
     return <Text>engine</Text>
   })
   await start($)
-  const ui = await $.ui.mount({ ...band(80, true), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(80, true), surface: 'terminal' })
   expect((await ui.find({ type: 'Text' }))?.text).toBe('engine')
   await ui.unmount()
 })
@@ -252,7 +262,7 @@ test('band under 6 columns gives the engine band; at 6 it cuts to fit (F9)', asy
   })
   await start($)
   await measure($)
-  const tiny = await $.ui.mount({ ...band(5), surface: 'desktop' })
+  const tiny = await $.ui.mount({ ...band(5), surface: 'terminal' })
   expect((await tiny.find({ type: 'Text' }))?.text).toBe('engine')
   await tiny.unmount()
   expect(await bandText($, 6)).toBe('72% 40')
@@ -281,7 +291,7 @@ test('the Pane component is not handled: render falls through to the engine', as
 test('session.measure updates a mounted band', async ($, on) => {
   engine(on, [])
   await start($)
-  const ui = await $.ui.mount({ ...band(80), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(80), surface: 'terminal' })
   expect(await shown(ui)).toBe(NONE)
   await measure($, [{ ...LIMITS[0]!, percentUsed: 85 }, LIMITS[1]!])
   expect(await shown(ui)).toBe('5h ##-------- 15% 2h 14m  |  7d ####------ 40% 3d 4h  |  Cache ---------- cold')
@@ -295,7 +305,7 @@ test('cache goes hot to cold after the TTL (auto, nothing learned: 1h)', async (
   answerSteps(on, { read: 9000, creation: 0, input: 10 })
   await start($)
   await step($)
-  const ui = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(99), surface: 'terminal' })
   expect(await shown(ui)).toContain('|  Cache ########## hot 60m')
   await clock.advance(59 * MIN)
   expect(await shown(ui)).toContain('|  Cache #--------- hot 01:00')
@@ -312,7 +322,7 @@ test('config 5m: cache goes hot to cold after 5 minutes', { options: { cacheTtl:
   answerSteps(on, { read: 9000, creation: 0, input: 10 })
   await start($)
   await step($)
-  const ui = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(99), surface: 'terminal' })
   expect(await shown(ui)).toContain('|  Cache ########## hot 05:00')
   await clock.advance(4 * MIN)
   expect(await shown(ui)).toContain('|  Cache ##-------- hot 01:00')
@@ -336,7 +346,7 @@ test('1h TTL from options: whole minutes over 10:00, mm:ss under (F6)', { option
 test('no data: no readings and no stored snapshot', async ($, on) => {
   engine(on, [])
   await start($)
-  for (const surface of ['terminal', 'desktop'] as const) {
+  for (const surface of ['terminal'] as const) {
     const ui = await $.ui.mount({ ...band(80), surface })
     expect(await shown(ui)).toBe(NONE)
     await ui.unmount()
@@ -349,7 +359,7 @@ test('no data: no readings and no stored snapshot', async ($, on) => {
 test('stored snapshot shows dim with its age', async ($, on) => {
   engine(on, [], { limits: { observedAt: NOW - 30 * MIN, items: LIMITS } })
   await start($)
-  const ui = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(99), surface: 'terminal' })
   const text = await allText(ui)
   expect(text).toContain('72%')
   expect((await ui.find({ type: 'Text', text: '72%' }))?.props.dimColor).toBe(true)
@@ -363,7 +373,7 @@ test('bar runs draw as Text with backgroundColor, track subtle', async ($, on) =
   await start($)
   await measure($)
   await step($)
-  const ui = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(99), surface: 'terminal' })
   expect(await shown(ui)).toBe('5h #######--- 72% 2h 14m  |  7d ####------ 40% 3d 4h  |  Cache ########## hot 60m')
   const bars = await barsOf(ui)
   expect(bars.map(t => [t.props.backgroundColor, t.text.length])).toEqual([
@@ -383,11 +393,11 @@ test('bar runs draw as Text with backgroundColor, track subtle', async ($, on) =
 test('bar colours: error under 20, inactive when stale', async ($, on) => {
   engine(on, [], { limits: { observedAt: NOW - 30 * MIN, items: LIMITS } })
   await start($)
-  const stale = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const stale = await $.ui.mount({ ...band(99), surface: 'terminal' })
   expect((await barsOf(stale)).map(t => t.props.backgroundColor)).toEqual(['inactive', 'subtle', 'inactive', 'subtle', 'subtle'])
   await stale.unmount()
   await measure($, [{ ...LIMITS[0]!, percentUsed: 81 }, { ...LIMITS[1]!, percentUsed: 49 }])
-  const live = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const live = await $.ui.mount({ ...band(99), surface: 'terminal' })
   expect((await barsOf(live)).map(t => [t.props.backgroundColor, t.text.length])).toEqual([
     ['error', 2], ['subtle', 8], ['success', 5], ['subtle', 5], ['subtle', 10],
   ])
@@ -398,7 +408,7 @@ test('bar colours: error under 20, inactive when stale', async ($, on) => {
 
 test('session.start reaches the engine once and passes its result through', async ($, on) => {
   const { calls } = engine(on, LIMITS)
-  const r = await $.session.start({ cwd: '/x', surface: 'desktop', isInteractive: true })
+  const r = await $.session.start({ cwd: '/x', surface: 'terminal', isInteractive: true })
   expect(calls['session.start']).toBe(1)
   expect(r.cwd).toBe('/x')
 })
@@ -748,7 +758,7 @@ test('every measure with readings refreshes observedAt, changed or not (F2)', as
   await clock.advance(15 * MIN)
   await measure($, LIMITS, [])
   expect((mem.limits as { observedAt: number }).observedAt).toBe(NOW + 15 * MIN)
-  const ui = await $.ui.mount({ ...band(80), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(80), surface: 'terminal' })
   expect((await ui.find({ type: 'Text', text: '72%' }))?.props.dimColor).toBe(undefined)
   await ui.unmount()
 })
@@ -759,7 +769,7 @@ test('live limits read long ago draw stale with their age (F2)', async ($, on) =
   await measure($)
   await clock.advance(3 * H)
   // The 5h window has rolled by now; the 7d one is stale.
-  const ui = await $.ui.mount({ ...band(99), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(99), surface: 'terminal' })
   expect((await ui.find({ type: 'Text', text: '40%' }))?.props.dimColor).toBe(true)
   await ui.unmount()
   expect(await readout($)).toContain('as of 3h 0m ago')
@@ -769,7 +779,7 @@ test('session.start: usage readings only when no snapshot, and drawn stale (F3)'
   const { mem } = engine(on, LIMITS)
   await start($)
   expect(mem.limits).toBe(undefined)
-  const ui = await $.ui.mount({ ...band(80), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...band(80), surface: 'terminal' })
   expect((await ui.find({ type: 'Text', text: '72%' }))?.props.dimColor).toBe(true)
   await ui.unmount()
 })
@@ -854,7 +864,7 @@ test('usage remaining (the default) and a saved value outside the options read a
   expect(await readout($)).toContain('5-hour: 72% left')
 })
 
-kitTest('usage used: the default look draws percent used and its alt says used', { options: { usage: 'used' } }, async ($, on) => {
+kitTest('usage used: the pips look draws percent used and its alt says used', { options: { usage: 'used' } }, async ($, on) => {
   engine(on, [])
   await start($)
   await measure($)
@@ -914,7 +924,7 @@ test('turn.step: beneath throws, the error reaches the caller and the request ra
   expect(calls).toBe(1)
 })
 
-// ---- art themes (0.3.0): kitTest, so the manifest default (clean) applies ----
+// ---- the pips art on the desktop: kitTest, not the TEXT wrapper ----
 
 const attach = ($: Engine, surface: 'desktop' | 'mobile' | 'terminal', clientId = surface + ':default') =>
   $.session.attach({ surface, clientId })
@@ -928,11 +938,11 @@ const countAttach = (on: On) => {
   return () => n
 }
 
-// Every art look; the loops below run for each, so a new look is covered by listing it here.
-const ART_LOOKS = ['clean', 'paper', 'terminal', 'sunset', 'flat', 'pips', 'squares'] as const
+// The one art look; the loops below keep its name for their test titles.
+const ART_LOOKS = ['pips'] as const
 
 for (const theme of ART_LOOKS) {
-  kitTest(`${theme}: the desktop band draws Svg with the readout as alt`, { options: { theme } }, async ($, on) => {
+  kitTest(`${theme}: the desktop band draws Svg with the readout as alt`, async ($, on) => {
     engine(on, [])
     on('ui.render', ($, e) => {
       const { Text } = $.ui.resolve(e)
@@ -959,7 +969,7 @@ for (const theme of ART_LOOKS) {
     await p.unmount()
   })
 
-  kitTest(`${theme}: the terminal always draws Text`, { options: { theme } }, async ($, on) => {
+  kitTest(`${theme}: the terminal always draws Text`, async ($, on) => {
     engine(on, [], {}, ['terminal'])
     await start($, 'terminal')
     await measure($)
@@ -970,28 +980,23 @@ for (const theme of ART_LOOKS) {
   })
 }
 
-// The clean look's svg ids start with uhn (band, dark: uhndb); any other look's differ.
-const CLEAN_ID = 'id="uhndbP"'
-// The default look is terminal (ids start with uht).
-const DEFAULT_ID = 'id="uhtdbP"'
+// The pips look's svg ids start with uhi (band, dark: uhidbP).
+const PIPS_ID = 'id="uhidbP"'
 
-kitTest('the manifest default is terminal', async ($, on) => {
+kitTest('the desktop draws the pips look', async ($, on) => {
   engine(on, [])
   await start($)
   const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
-  const src = String((await b.find({ type: 'Svg' }))?.props.source)
-  expect(src).toContain(DEFAULT_ID)
+  expect(String((await b.find({ type: 'Svg' }))?.props.source)).toContain(PIPS_ID)
   await b.unmount()
 })
 
-kitTest('explicit theme clean draws Svg on the desktop and Text on the terminal', { options: { theme: 'clean' } }, async ($, on) => {
+kitTest('pips draws Svg on the desktop and Text on the terminal', async ($, on) => {
   engine(on, LIMITS, {}, ['desktop', 'terminal'])
   await start($)
   await measure($)
   const d = await $.ui.mount({ ...band(99), surface: 'desktop' })
-  const svg = await d.find({ type: 'Svg' })
-  expect(String(svg?.props.source).startsWith('<svg ')).toBe(true)
-  expect(String(svg?.props.source)).toContain(CLEAN_ID)
+  expect(String((await d.find({ type: 'Svg' }))?.props.source)).toContain(PIPS_ID)
   expect(await d.find({ type: 'Text' })).toBe(undefined)
   await d.unmount()
   const t = await $.ui.mount({ ...band(80), surface: 'terminal' })
@@ -1000,54 +1005,17 @@ kitTest('explicit theme clean draws Svg on the desktop and Text on the terminal'
   await t.unmount()
 })
 
-for (const gone of ['classic', 'midnight', 'mono'] as const) {
-  kitTest(`a saved theme of ${gone} (removed in 0.8.0) falls back to the default terminal look`, { options: { theme: gone as any } }, async ($, on) => {
+// The theme option is gone (0.9.0): any saved value, of a removed look or not, is ignored.
+for (const old of ['terminal', 'clean', 'paper', 'sunset', 'flat', 'squares', 'text', 'classic', 'midnight', 'mono', 'christmas'] as const) {
+  kitTest(`a saved theme of ${old} is ignored: the desktop draws pips`, { options: { theme: old as any } }, async ($, on) => {
     engine(on, LIMITS)
     await start($)
     await measure($)
     const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
-    expect(String((await b.find({ type: 'Svg' }))?.props.source)).toContain(DEFAULT_ID)
+    expect(String((await b.find({ type: 'Svg' }))?.props.source)).toContain(PIPS_ID)
     await b.unmount()
   })
 }
-
-kitTest('a saved theme of christmas (removed in 0.4.0) falls back to the default terminal look', { options: { theme: 'christmas' as any } }, async ($, on) => {
-  engine(on, LIMITS, {}, ['desktop', 'terminal'])
-  await start($)
-  await measure($)
-  const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
-  const src = String((await b.find({ type: 'Svg' }))?.props.source)
-  expect(src).toContain(DEFAULT_ID)
-  for (const c of ['snowflake', 'holly', 'ornament', 'stripes']) expect(src.includes(c)).toBe(false)
-  await b.unmount()
-  // The terminal still draws text.
-  const t = await $.ui.mount({ ...band(80), surface: 'terminal' })
-  expect(await t.find({ type: 'Svg' })).toBe(undefined)
-  await t.unmount()
-})
-
-for (const theme of ['paper', 'terminal', 'sunset', 'flat', 'pips', 'squares'] as const) {
-  kitTest(`explicit theme ${theme} draws its own svg on the desktop`, { options: { theme } }, async ($, on) => {
-    engine(on, [])
-    await start($)
-    await measure($)
-    const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
-    const src = String((await b.find({ type: 'Svg' }))?.props.source)
-    expect(src.startsWith('<svg ')).toBe(true)
-    expect(src.includes(CLEAN_ID)).toBe(false)
-    await b.unmount()
-  })
-}
-
-kitTest('text theme draws Text on the desktop', { options: { theme: 'text' } }, async ($, on) => {
-  engine(on, [])
-  await start($)
-  await measure($)
-  const b = await $.ui.mount({ ...band(80), surface: 'desktop' })
-  expect(await shown(b)).toBe(WIDE)
-  expect(await b.find({ type: 'Svg' })).toBe(undefined)
-  await b.unmount()
-})
 
 kitTest('art: too narrow for art draws text, and under 6 columns the engine band', async ($, on) => {
   engine(on, [])
@@ -1078,18 +1046,7 @@ kitTest('SVG themes never wake faster than 60 s, even with the cache under 10 mi
   expect(ticks() - before).toBeGreaterThan(0)
 })
 
-kitTest('the text theme still ticks seconds under 10 minutes', { options: { theme: 'text' } }, async ($, on) => {
-  const { clock, ticks } = engine(on, LIMITS)
-  answerSteps(on, { read: 9000, creation: 0, input: 10 })
-  await start($)
-  await step($)
-  await clock.advance(51 * MIN)
-  const before = ticks()
-  await clock.advance(MIN)
-  expect(ticks() - before).toBeGreaterThan(30)
-})
-
-kitTest('with a terminal attached, an SVG theme keeps the text second ticks', async ($, on) => {
+kitTest('with a terminal attached, the text strip keeps its second ticks', async ($, on) => {
   const { clock, ticks } = engine(on, LIMITS, {}, ['terminal'])
   answerSteps(on, { read: 9000, creation: 0, input: 10 })
   await start($, 'terminal')
@@ -1189,46 +1146,6 @@ kitTest('no surfaces and no client start: no open, no error line; /usage-hud sti
 
 // ---- REVIEW 0.3 adversarial ----
 
-for (const bad of ['neon', 'TEXT', 'Christmas', 'christmas', 'Clean', '', 42, ['text']] as unknown[]) {
-  kitTest(`R4 invalid theme ${JSON.stringify(bad)} falls back to terminal`, { options: { theme: bad as any } }, async ($, on) => {
-    engine(on, LIMITS)
-    await start($)
-    await measure($)
-    const b = await $.ui.mount({ ...band(99), surface: 'desktop' })
-    const svg = await b.find({ type: 'Svg' })
-    expect(svg).not.toBe(undefined)
-    expect(await b.find({ type: 'Text' })).toBe(undefined)
-    const src = String(svg?.props.source)
-    expect(src.startsWith('<svg ')).toBe(true)
-    expect(src).toContain(DEFAULT_ID)
-    await b.unmount()
-  })
-}
-
-kitTest('R5 text theme on the desktop draws the band exactly as on the terminal', { options: { theme: 'text' } }, async ($, on) => {
-  engine(on, LIMITS)
-  await start($)
-  await measure($)
-  for (const c of [6, 12, 25, 40, 80, 99, 200]) {
-    const d = await $.ui.mount({ ...band(c), surface: 'desktop' })
-    const t = await $.ui.mount({ ...band(c), surface: 'terminal' })
-    expect(await shown(d)).toBe(await shown(t))
-    expect(await d.find({ type: 'Svg' })).toBe(undefined)
-    await d.unmount(); await t.unmount()
-  }
-})
-
-kitTest('R11 text theme cadence unchanged: seconds under 10 min of cache', { options: { theme: 'text' } }, async ($, on) => {
-  const { clock, ticks } = engine(on, LIMITS)
-  answerSteps(on, { read: 9000, creation: 0, input: 10 })
-  await start($)
-  await step($)
-  await clock.advance(51 * MIN)
-  const before = ticks()
-  await clock.advance(MIN)
-  expect(ticks() - before).toBeGreaterThanOrEqual(55)
-})
-
 kitTest('R1 render with a throwing clock falls back to next(e) on the Svg path', async ($, on) => {
   let boom = false
   let logs: string[] = []
@@ -1262,8 +1179,8 @@ kitTest('R1 render with a throwing clock falls back to next(e) on the Svg path',
   await b.unmount()
 })
 
-for (const theme of [...ART_LOOKS, 'text'] as const) {
-  kitTest(`R3 ${theme}: render never writes state`, { options: { theme } }, async ($, on) => {
+for (const theme of ART_LOOKS) {
+  kitTest(`R3 ${theme}: render never writes state`, async ($, on) => {
     let counting = false
     let writes = 0
     on('state.set', (_, e, next) => {
@@ -1284,7 +1201,7 @@ for (const theme of [...ART_LOOKS, 'text'] as const) {
 }
 
 for (const theme of ART_LOOKS) {
-  kitTest(`R10 ${theme}: over 6 simulated hours timer wakes are never under 60 s apart`, { options: { theme } }, async ($, on) => {
+  kitTest(`R10 ${theme}: over 6 simulated hours timer wakes are never under 60 s apart`, async ($, on) => {
     const lim: SessionUsage['rateLimits'] = [
       { kind: 'five_hour', percentUsed: 28, resetsAt: new Date(NOW + 61_000).toISOString() },
       { kind: 'seven_day', percentUsed: 60, resetsAt: new Date(NOW + 90_500).toISOString() },
@@ -1315,7 +1232,7 @@ for (const theme of ART_LOOKS) {
 }
 
 for (const theme of ART_LOOKS) {
-kitTest(`R12 ${theme}: privacy: art themes log nothing and store only limits`, { options: { theme } }, async ($, on) => {
+kitTest(`R12 ${theme}: privacy: art themes log nothing and store only limits`, async ($, on) => {
   const { mem, logs, clock } = engine(on, LIMITS)
   countAttach(on)
   answerSteps(on, { read: 9000, creation: 0, input: 10, model: 'claude-<x>&"secret' })

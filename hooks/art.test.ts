@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { CacheView, View, WindowView } from './data'
 import { BAND_CELL_PX, BAND_H, altText, bandSvg, esc, palette, textW } from './art'
-import type { ArtTheme, Palette } from './art'
+import type { Palette } from './art'
 
 const M = 60_000
 const H = 60 * M
@@ -55,13 +55,13 @@ function wellFormed(svg: string): boolean {
   return at === svg.length && stack.length === 0
 }
 
-// Every art theme: the generic tests below run against each, so a new look is covered by listing it here.
-const THEMES: ArtTheme[] = ['clean', 'paper', 'terminal', 'sunset', 'flat', 'pips', 'squares']
+// The one look, pips. The loops below keep the theme name for their messages.
+const THEMES = ['pips'] as const
 
 test('every state, theme, scheme and width draws well-formed SVG under 20 KB', () => {
   for (const theme of THEMES) for (const dark of [true, false]) for (const [k, v] of Object.entries(STATES)) {
     for (const cols of [12, 24, 40, 64, 99, 140]) {
-      const a = bandSvg(v, cols, theme, dark)
+      const a = bandSvg(v, cols, dark)
       if (!wellFormed(a.source)) throw new Error(`malformed: ${theme} ${dark} ${k} ${cols}`)
       expect(a.source.length < 20_000).toBe(true)
       expect(a.source.length <= 131_072).toBe(true)
@@ -72,10 +72,10 @@ test('every state, theme, scheme and width draws well-formed SVG under 20 KB', (
 test('width follows the measured cell size; the band is about two rows tall', () => {
   // Measured on the desktop app: band about 750 px at 99 columns.
   for (const theme of THEMES) {
-    expect(bandSvg(base(), 99, theme, true).width).toBe(742)
+    expect(bandSvg(base(), 99, true).width).toBe(742)
     for (const cols of [1, 12, 24, 64, 99, 140]) {
       const bw = Math.max(60, Math.floor(cols * BAND_CELL_PX))
-      const b = bandSvg(base(), cols, theme, true)
+      const b = bandSvg(base(), cols, true)
       expect(b.width).toBe(bw)
       expect(b.height).toBe(BAND_H)
       expect(b.source).toContain(`width="${bw}" height="${BAND_H}" viewBox="0 0 ${bw} ${BAND_H}"`)
@@ -97,10 +97,8 @@ test('every state renders its label in the band', () => {
     resetting: ['99%'],
   }
   for (const theme of THEMES) for (const [k, v] of Object.entries(STATES)) {
-    const band = words(bandSvg(v, 99, theme, true).source)
+    const band = words(bandSvg(v, 99, true).source)
     for (const w of want[k]!) {
-      // squares gives the reset time up for big squares at this width (by design; /usage-hud has it).
-      if (theme === 'squares' && w === '2h 14m') continue
       if (!band.includes(w) && !(k === 'na' && w === 'Limits n/a')) throw new Error(`band ${theme} ${k} lacks ${w}: ${band}`)
     }
   }
@@ -108,14 +106,14 @@ test('every state renders its label in the band', () => {
 
 test('the art shows whole minutes only, so it changes at most once a minute', () => {
   for (const theme of THEMES) {
-    const a = (ms: number) => words(bandSvg(base({ cache: hot(ms) }), 99, theme, true).source)
+    const a = (ms: number) => words(bandSvg(base({ cache: hot(ms) }), 99, true).source)
     expect(a(9 * M + 59_000)).toContain('hot 9m')
     expect(a(9 * M + 1_000)).toContain('hot 9m')
     expect(a(9 * M + 59_000)).not.toContain(':')
     expect(a(30_000)).toContain('hot <1m')
     for (const cols of [99, 64]) {
-      expect(bandSvg(base({ cache: hot(9 * M + 59_000) }), cols, theme, true).source)
-        .toBe(bandSvg(base({ cache: hot(9 * M + 1_000) }), cols, theme, true).source)
+      expect(bandSvg(base({ cache: hot(9 * M + 59_000) }), cols, true).source)
+        .toBe(bandSvg(base({ cache: hot(9 * M + 1_000) }), cols, true).source)
     }
   }
 })
@@ -127,16 +125,14 @@ test('text placed in the SVG is escaped', () => {
 test('palettes switch with the theme and with dark or light', () => {
   const panels = new Set<string>()
   for (const theme of THEMES) {
-    expect(palette(theme, true).panel).not.toBe(palette(theme, false).panel)
+    expect(palette(true).panel).not.toBe(palette(false).panel)
     for (const dark of [true, false]) {
-      const p = palette(theme, dark)
+      const p = palette(dark)
       panels.add(p.panel)
-      expect(bandSvg(base(), 99, theme, dark).source).toContain(`stop-color="${p.panel}"`)
+      expect(bandSvg(base(), 99, dark).source).toContain(`stop-color="${p.panel}"`)
     }
   }
-  // At least clean dark, paper dark and a light panel.
-  expect(panels.size >= 3).toBe(true)
-  expect(palette('paper', true).panel).not.toBe(palette('clean', true).panel)
+  expect(panels.size).toBe(2)
 })
 
 // WCAG contrast of each text colour against the panel.
@@ -151,7 +147,7 @@ const contrast = (a: string, b: string): number => {
 
 test('text contrast against the panel is at least 4.5:1 in every palette', () => {
   for (const theme of THEMES) for (const dark of [true, false]) {
-    const p: Palette = palette(theme, dark)
+    const p: Palette = palette(dark)
     for (const k of ['text', 'muted', 'faint', 'midText', 'lowText', 'hotText'] as const) {
       for (const bg of [p.panel, p.panel2]) {
         const r = contrast(p[k], bg)
@@ -163,7 +159,7 @@ test('text contrast against the panel is at least 4.5:1 in every palette', () =>
 
 test('no randomness: the same view draws the same string', () => {
   for (const theme of THEMES) for (const dark of [true, false]) {
-    expect(bandSvg(base(), 99, theme, dark).source).toBe(bandSvg(base(), 99, theme, dark).source)
+    expect(bandSvg(base(), 99, dark).source).toBe(bandSvg(base(), 99, dark).source)
   }
 })
 
@@ -180,153 +176,30 @@ test('usage used: every look shows the percent used and the alt says used', () =
   const v = base({ fiveHour: used(win('5h', 72, 2 * H + 14 * M)), sevenDay: used(win('7d', 40, 3 * D + 4 * H)) })
   expect(altText(v)).toContain('5-hour: 28% used, resets in 2h 14m 7-day: 60% used, resets in 3d 4h')
   for (const theme of THEMES) for (const dark of [true, false]) {
-    const s = bandSvg(v, 99, theme, dark).source
+    const s = bandSvg(v, 99, dark).source
     expect(s).toContain('28%')
     expect(s).toContain('60%')
     expect(s.includes('72%')).toBe(false)
     // The drawing changes with the option.
-    expect(s === bandSvg(base(), 99, theme, dark).source).toBe(false)
+    expect(s === bandSvg(base(), 99, dark).source).toBe(false)
   }
 })
 
 test('system fonts with tabular numbers, no embedded font, no animation', () => {
   for (const theme of THEMES) {
-    const s = bandSvg(base(), 99, theme, true).source
+    const s = bandSvg(base(), 99, true).source
     expect(s).toContain('font-family="')
     expect(s).toContain('font-variant-numeric:tabular-nums')
     for (const k of ['@font-face', '<animate', '<script', 'base64']) expect(s.includes(k)).toBe(false)
   }
-  // The default stack, for the looks that use it.
-  for (const theme of ['clean'] as const) {
-    expect(bandSvg(base(), 99, theme, true).source).toContain('font-family="system-ui, &#39;Segoe UI&#39;, sans-serif"')
-  }
-})
-
-// ---- clean theme ----
-
-const cleanBandOf = (v: View, cols = 99, dark = true) => bandSvg(v, cols, 'clean', dark)
-/** True when a bar (a rounded rect) is filled with this colour. Status dots are circles, so they do not match. */
-const hasBar = (svg: string, color: string): boolean => new RegExp(`<rect [^>]*rx="[^"]*" fill="${color}"`).test(svg)
-
-test('clean: well-formed, deterministic and small at every width, scheme and state', () => {
-  for (const dark of [true, false]) for (const [k, v] of Object.entries(STATES)) {
-    for (let cols = 12; cols <= 200; cols += 7) {
-      const b = cleanBandOf(v, cols, dark)
-      if (!wellFormed(b.source)) throw new Error(`malformed band: ${dark} ${k} ${cols}`)
-      expect(b.source.length < 20_000).toBe(true)
-      expect(b.source).toBe(cleanBandOf(v, cols, dark).source)
-    }
-  }
-})
-
-test('clean: the band is exactly floor(cols * BAND_CELL_PX) by BAND_H', () => {
-  expect(cleanBandOf(base(), 99).width).toBe(742)
-  for (let cols = 1; cols <= 200; cols++) {
-    const bw = Math.max(60, Math.floor(cols * BAND_CELL_PX))
-    const b = cleanBandOf(base(), cols)
-    expect(b.width).toBe(bw)
-    expect(b.height).toBe(BAND_H)
-    expect(b.source).toContain(`width="${bw}" height="${BAND_H}" viewBox="0 0 ${bw} ${BAND_H}"`)
-  }
-})
-
-test('clean: no decoration: no pattern, highlight or second gradient', () => {
-  for (const dark of [true, false]) for (const v of Object.values(STATES)) {
-    const x = cleanBandOf(v, 99, dark).source
-    for (const k of ['<pattern', 'ornament', 'opacity=".2"']) {
-      if (x.includes(k)) throw new Error(`clean draws ${k}`)
-    }
-    // One gradient only: the panel. No frost or flake gradient.
-    expect((x.match(/<linearGradient/g) ?? []).length).toBe(1)
-  }
-})
-
-test('clean: bar colour follows the threshold, green over 50, amber 20 to 50, red under 20', () => {
-  for (const dark of [true, false]) {
-    const p = palette('clean', dark)
-    const view = (pl: number) => base({ fiveHour: win('5h', pl, H), sevenDay: { label: '7d', state: 'none' }, cache: { state: 'cold', reason: 'new' } })
-    const bandOf = (pl: number) => cleanBandOf(view(pl), 99, dark).source
-    const want = (pl: number): 'good' | 'mid' | 'low' => (pl > 50 ? 'good' : pl >= 20 ? 'mid' : 'low')
-    for (const pl of [100, 80, 51, 50, 40, 20, 19, 10, 1]) {
-      const svg = bandOf(pl)
-      for (const c of ['good', 'mid', 'low'] as const) {
-        if (hasBar(svg, p[c]) !== (c === want(pl))) throw new Error(`${dark} ${pl}% expected ${want(pl)}, ${c} ${hasBar(svg, p[c])}`)
-      }
-      expect(hasBar(svg, p.stale)).toBe(false)
-    }
-    // The big number takes the matching text colour.
-    expect(bandOf(80)).toContain(`fill="${p.text}">80%`)
-    expect(bandOf(40)).toContain(`fill="${p.midText}">40%`)
-    expect(bandOf(10)).toContain(`fill="${p.lowText}">10%`)
-    // A reached limit is red even though the number is 0.
-    const ex = base({ sevenDay: win('7d', 0, 26 * H, { exceeded: true }) })
-    const exSvg = cleanBandOf(ex, 99, dark).source
-    expect(exSvg).toContain(`fill="${p.lowText}">0%`)
-    expect(exSvg).toContain(`fill="${p.low}"`)
-    // Stale readings draw the stale grey bar, dimmed, with the number in muted text.
-    const st = STATES.stale!
-    const stSvg = cleanBandOf(st, 99, dark).source
-    expect(hasBar(stSvg, p.stale)).toBe(true)
-    expect(hasBar(stSvg, p.good)).toBe(false)
-    expect(stSvg).toContain('<g opacity=".8">')
-    expect(stSvg).toContain(`fill="${p.muted}">88%`)
-    // A fresh view has no dimmed group.
-    expect(cleanBandOf(base(), 99, dark).source.includes('opacity=')).toBe(false)
-  }
-})
-
-test('clean: the cache bar is calm blue while hot, mid when under a minute, and absent when cold', () => {
-  for (const dark of [true, false]) {
-    const p = palette('clean', dark)
-    const hotB = cleanBandOf(base(), 99, dark).source
-    expect(hasBar(hotB, p.frost)).toBe(true)
-    expect(hotB).toContain(`fill="${p.hotText}">hot 52m`)
-
-    const cold = STATES.cold!
-    const coldB = cleanBandOf(cold, 99, dark).source
-    expect(hasBar(coldB, p.frost)).toBe(false)
-    expect(coldB.includes(p.hotText)).toBe(false)
-    expect(coldB).toContain(`fill="${p.faint}">cold`)
-    expect(words(coldB)).toContain('compacted')
-
-    const last = base({ cache: hot(30_000) })
-    expect(hasBar(cleanBandOf(last, 99, dark).source, p.mid)).toBe(true)
-    expect(hasBar(cleanBandOf(last, 99, dark).source, p.frost)).toBe(false)
-    expect(words(cleanBandOf(last, 99, dark).source)).toContain('hot <1m')
-  }
-})
-
-test('clean: Limits n/a draws one wide quiet block in the band', () => {
-  for (const dark of [true, false]) {
-    const p = palette('clean', dark)
-    const b = cleanBandOf(STATES.na!, 99, dark).source
-    expect(words(b)).toContain('Limits n/a')
-    expect(words(b)).toContain('hot 52m')
-    expect(b.includes('%')).toBe(false)
-    expect(b.includes('5-HOUR')).toBe(false)
-    expect(b).toContain(`fill="${p.muted}">Limits n/a`)
-    expect(hasBar(b, p.good) || hasBar(b, p.mid) || hasBar(b, p.low)).toBe(false)
-  }
-  // One window n/a but not the other is not the combined block.
-  const one = base({ fiveHour: { label: '5h', state: 'na' } })
-  expect(words(cleanBandOf(one).source).includes('Limits n/a')).toBe(false)
-})
-
-test('clean: stale and rolled windows are dimmed and never say "as of"', () => {
-  const st = STATES.stale!
-  expect(words(cleanBandOf(st).source)).toContain('88%')
-  expect(words(cleanBandOf(st).source)).toContain('3h 0m')
-  expect(words(cleanBandOf(st).source).includes('as of')).toBe(false)
-  expect(cleanBandOf(st).source).toContain('opacity=".8"')
-  const ro = STATES.rolled!
-  expect(words(cleanBandOf(ro).source)).toContain('reset')
-  expect(words(cleanBandOf(ro).source).includes('as of')).toBe(false)
+  // The default system stack.
+  expect(bandSvg(base(), 99, true).source).toContain('font-family="system-ui, &#39;Segoe UI&#39;, sans-serif"')
 })
 
 test('gradient ids are unique per theme and scheme, and every url() resolves', () => {
   const owner = new Map<string, string>()
   for (const theme of THEMES) for (const dark of [true, false]) {
-    const art = bandSvg(base(), 99, theme, dark)
+    const art = bandSvg(base(), 99, dark)
     const ids = [...art.source.matchAll(/ id="([^"]+)"/g)].map(m => m[1]!)
     const key = `${theme}/${dark ? 'dark' : 'light'}`
     expect(ids.length > 0).toBe(true)
@@ -337,17 +210,13 @@ test('gradient ids are unique per theme and scheme, and every url() resolves', (
     }
     for (const m of art.source.matchAll(/url\(#([^)]+)\)/g)) expect(ids.includes(m[1]!)).toBe(true)
   }
-  expect([...owner].filter(([, k]) => k.startsWith('clean/')).length).toBe(2)
+  expect([...owner].filter(([, k]) => k.startsWith('pips/')).length).toBe(2)
 })
 
-test('svg ids keep their pinned letters: n for clean, one letter per theme', () => {
-  const tag = (theme: ArtTheme, dark: boolean): string => {
-    const a = bandSvg(base(), 99, theme, dark)
-    return /id="uh(\w)([dl])bP"/.exec(a.source)!.slice(1).join('')
-  }
-  expect(tag('clean', true)).toBe('nd')
-  expect(tag('clean', false)).toBe('nl')
-  expect(new Set(THEMES.map(t => tag(t, true)[0])).size).toBe(THEMES.length)
+test('svg ids keep their pinned letter: i for pips', () => {
+  const tag = (dark: boolean): string => /id="uh(\w)([dl])bP"/.exec(bandSvg(base(), 99, dark).source)!.slice(1).join('')
+  expect(tag(true)).toBe('id')
+  expect(tag(false)).toBe('il')
 })
 
 /** Every <text> in a drawing with its horizontal extent, as the art measures it (textW, letter-spacing, dx). */
@@ -376,10 +245,10 @@ function boxes(svg: string): { x0: number; x1: number; y: number; size: number; 
   return out
 }
 
-test('clean: band text stays inside the box and clear of its neighbours, columns 12 to 200', () => {
+test('pips: band text stays inside the box and clear of its neighbours, columns 12 to 200', () => {
   for (const dark of [true, false]) for (const [k, v] of Object.entries(STATES)) {
     for (let cols = 12; cols <= 200; cols++) {
-      const a = cleanBandOf(v, cols, dark)
+      const a = bandSvg(v, cols, dark)
       const bs = boxes(a.source)
       expect(bs.length > 0).toBe(true)
       for (const b of bs) {
@@ -397,98 +266,31 @@ test('clean: band text stays inside the box and clear of its neighbours, columns
   }
 })
 
-test('clean: text colours keep 4.5:1 against the panel in dark and light', () => {
-  // Relative luminance (WCAG 2.x) and the contrast ratio built on it.
-  const rel = (hex: string): number => {
-    const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
-    return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!
-  }
-  const ratio = (a: string, b: string): number => (Math.max(rel(a), rel(b)) + 0.05) / (Math.min(rel(a), rel(b)) + 0.05)
-  expect(Math.round(ratio('#000000', '#ffffff'))).toBe(21)
+// ---- pips: cache bars red while hot, all ten blue when cold ----
+
+test('pips: hot cache pips are hotRed, a cold cache lights all ten in coldBlue', () => {
   for (const dark of [true, false]) {
-    const p = palette('clean', dark)
-    for (const k of ['text', 'muted', 'faint', 'midText', 'lowText', 'hotText'] as const) {
-      for (const bg of [p.panel, p.panel2]) {
-        const r = ratio(p[k], bg)
-        if (r < 4.5) throw new Error(`clean ${dark ? 'dark' : 'light'} ${k} ${r.toFixed(2)}`)
-      }
-    }
-    // The bar fills are graphics: they should still be seen on the panel (3:1).
-    for (const k of ['good', 'mid', 'low', 'frost'] as const) {
-      const r = ratio(p[k], p.panel)
-      if (r < 3) throw new Error(`clean ${dark ? 'dark' : 'light'} bar ${k} ${r.toFixed(2)}`)
-    }
-  }
-})
-
-// ---- cache tones: hot cache text red, cold cache text blue (the five newer looks only) ----
-
-const TONED: ArtTheme[] = ['paper', 'terminal', 'sunset']
-
-/** The fills of every tspan whose text matches `re`. */
-const fillsOf = (svg: string, re: RegExp): string[] =>
-  [...svg.matchAll(/<tspan fill="([^"]+)"[^>]*>([^<]*)<\/tspan>/g)].filter(m => re.test(m[2]!)).map(m => m[1]!)
-
-test('cache tones: palettes define hotRed and coldBlue with 4.5:1 contrast on the panel, in every scheme', () => {
-  for (const theme of TONED) for (const dark of [true, false]) {
-    const p = palette(theme, dark)
-    expect(p.hotRed).toBeDefined()
-    expect(p.coldBlue).toBeDefined()
-    for (const c of [p.hotRed!, p.coldBlue!]) {
-      expect(contrast(c, p.panel)).toBeGreaterThanOrEqual(4.5)
-      expect(contrast(c, p.panel2)).toBeGreaterThanOrEqual(4.5)
-    }
-  }
-})
-
-test('cache tones: a hot cache draws its text in hotRed (also in the last minute), a cold one in coldBlue', () => {
-  for (const theme of TONED) for (const dark of [true, false]) for (const cols of [100, 64]) {
-    const p = palette(theme, dark)
-    for (const left of [52 * M + 10_000, 9 * M, 30_000]) {
-      const svg = bandSvg(base({ cache: hot(left) }), cols, theme, dark).source
-      const fills = fillsOf(svg, /\dm|<1m/)
-      expect(fills.includes(p.hotRed!)).toBe(true)
-    }
-    const cold = bandSvg(base({ cache: { state: 'cold', reason: 'expired' } }), cols, theme, dark).source
-    expect(fillsOf(cold, /^cold$|^expired/).includes(p.coldBlue!)).toBe(true)
-  }
-})
-
-test('cache tones: the limit numbers keep their own colours', () => {
-  for (const theme of TONED) {
-    const p = palette(theme, true)
-    const svg = bandSvg(base({ fiveHour: win('5h', 12, 41 * M) }), 100, theme, true).source
-    expect(fillsOf(svg, /^12%$/).includes(p.lowText)).toBe(true)
-  }
-})
-
-test('cache tones: clean is left as it was', () => {
-  for (const theme of ['clean'] as ArtTheme[]) {
-    expect(palette(theme, true).hotRed).toBeUndefined()
-    expect(palette(theme, true).coldBlue).toBeUndefined()
-  }
-})
-
-// ---- pips: cache squares red while hot, all ten blue when cold ----
-
-test('pips and squares: hot cache pips are hotRed, a cold cache lights all ten in coldBlue', () => {
-  for (const theme of ['pips', 'squares'] as ArtTheme[]) for (const dark of [true, false]) {
-    const p = palette(theme, dark)
+    const p = palette(dark)
     const rects = (svg: string, c: string) => (svg.match(new RegExp(`<rect [^>]*fill="${c}"`, 'g')) ?? []).length
-    const hotSvg = bandSvg(base({ cache: hot(41 * M) }), 99, theme, dark).source
+    const hotSvg = bandSvg(base({ cache: hot(41 * M) }), 99, dark).source
     expect(rects(hotSvg, p.hotRed!)).toBeGreaterThan(0)
-    const coldSvg = bandSvg(base({ cache: { state: 'cold', reason: 'expired' } }), 99, theme, dark).source
+    const coldSvg = bandSvg(base({ cache: { state: 'cold', reason: 'expired' } }), 99, dark).source
     expect(rects(coldSvg, p.coldBlue!)).toBe(10)
   }
 })
 
-test('pips draws bars taller than wide at 99 columns; squares draws squares of 11 px or more', () => {
+test('pips: bars at 99 columns are tall (21 px) and widen to fill the strip', () => {
   const sizes = (svg: string): [number, number][] =>
     [...svg.matchAll(/<rect x="[^"]+" y="[^"]+" width="([\d.]+)" height="([\d.]+)" rx/g)].map(m => [Number(m[1]), Number(m[2])])
-  const sq = sizes(bandSvg(base({ cache: hot(41 * M) }), 99, 'squares', true).source)
-  expect(sq.length).toBe(30)
-  for (const [w, h] of sq) { expect(w).toBeGreaterThanOrEqual(11); expect(h).toBe(w) }
-  const tall = sizes(bandSvg(base({ cache: hot(41 * M) }), 99, 'pips', true).source)
-  expect(tall.length).toBe(30)
-  for (const [w, h] of tall) expect(h).toBeGreaterThan(w * 1.5)
+  const full = sizes(bandSvg(base({ cache: hot(41 * M) }), 99, true).source)
+  expect(full.length).toBe(30)
+  for (const [w, h] of full) { expect(h).toBe(21); expect(w).toBeGreaterThanOrEqual(6); expect(w).toBeLessThanOrEqual(12.6) }
+  // Longer words (a cold cache, a reached limit) may take a rung down, still tall.
+  for (const v of [STATES.cold!, STATES.exceeded!]) {
+    const bars = sizes(bandSvg(v, 99, true).source)
+    expect(bars.length).toBe(30)
+    for (const [w, h] of bars) expect(h).toBeGreaterThanOrEqual(17.5)
+  }
+  // Narrower, the bars stay tall: the words give way first.
+  for (const [w, h] of sizes(bandSvg(base({ cache: hot(41 * M) }), 56, true).source)) expect(h).toBeGreaterThan(w * 1.5)
 })
