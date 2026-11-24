@@ -1,7 +1,6 @@
-// Shared, theme-agnostic pieces of the SVG art: text measuring, the readouts every theme
-// draws (what each block says), fitting helpers, the constants of the surfaces,
-// and the small baseline drawing helpers (pill bar, panel frame) the quiet themes share.
-// Themes import this file (and ./data, ./format) and nothing else from the art code.
+// Shared pieces of the SVG art: text measuring, the readouts the pips look draws (what each
+// block says), fitting helpers and the constants of the surfaces.
+// ./themes/pips imports this file (and ./data, ./format) and nothing else from the art code.
 import { shownPercent, ttlMs } from './data'
 import type { CacheView, View, WindowView } from './data'
 import { formatDuration } from './format'
@@ -162,7 +161,7 @@ export function bandTail(r: Readout, isCache: boolean): string {
   return [r.detail.replace(/^resets in /, ''), r.extra].filter(t => t).join(', ')
 }
 
-// ---- baseline drawing helpers (used by the clean look) ----
+// ---- drawing helpers ----
 
 /** The solid colour of a bar fill, or 'none'. */
 export function fillPaint(f: Fill, p: Palette): string {
@@ -172,28 +171,4 @@ export function fillPaint(f: Fill, p: Palette): string {
   if (f === 'stale') return p.stale
   if (f === 'frost') return p.frost
   return 'none'
-}
-
-/** A rounded pill bar: the track, then the fill as a pill of its own (at least a dot wide). */
-export function pill(x: number, y: number, w: number, h: number, frac: number, f: Fill, p: Palette): string {
-  const r = h / 2
-  let s = `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${h}" rx="${r}" fill="${p.track}"/>`
-  const fr = Number.isFinite(frac) ? Math.min(1, Math.max(0, frac)) : 0
-  if (fr > 0 && f !== 'none') {
-    const fw = Math.max(h, w * fr)
-    s += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(fw)}" height="${h}" rx="${r}" fill="${fillPaint(f, p)}"/>`
-  }
-  return s
-}
-
-/**
- * The card: svg root, a panel gradient (id `${id}P`) and a rounded border. `id` carries the
- * variant (theme, scheme, surface) so two drawings on one page never borrow each other's defs.
- */
-export function frame(w: number, h: number, p: Palette, id: string, body: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
-    `font-family="${esc(FONT)}" style="font-variant-numeric:tabular-nums">` +
-    `<defs><linearGradient id="${id}P" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.panel2}"/><stop offset="1" stop-color="${p.panel}"/></linearGradient></defs>` +
-    `<rect x=".5" y=".5" width="${w - 1}" height="${h - 1}" rx="8" fill="url(#${id}P)" stroke="${p.border}" stroke-width="1"/>` +
-    body + '</svg>'
 }

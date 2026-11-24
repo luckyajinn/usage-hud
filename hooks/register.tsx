@@ -7,8 +7,8 @@ import type { CacheStamp, LimitsSnap, Ttl, TtlSetting } from '../types'
 import { computeView, mergeSnap, nextWake, pickLimit, resolveTtl, stampFromResume, stampFromStep, ttlFromResume, ttlMs } from './data'
 import type { UsageShown, View } from './data'
 import { bandSegments, commandText } from './format'
-import { ART_THEMES, altText, bandSvg } from './art'
-import type { Art, ArtTheme } from './art'
+import { altText, bandSvg } from './art'
+import type { Art } from './art'
 import type { Seg } from './format'
 
 const limitsA = atom({ plugin: 'usage-hud', key: 'limits' } as const, null)
@@ -33,8 +33,6 @@ function log($: $T, where: string, err?: unknown): void {
 const isSetting = (v: unknown): v is TtlSetting => v === 'auto' || v === '5m' || v === '1h'
 const isTtl = (v: unknown): v is Ttl => v === '5m' || v === '1h'
 const isUsage = (v: unknown): v is UsageShown => v === 'remaining' || v === 'used'
-type Theme = ArtTheme | 'text'
-const isTheme = (v: unknown): v is Theme => ART_THEMES.includes(v as ArtTheme) || v === 'text'
 /**
  * Dark or light art. Neither the render input nor its viewport carries a colour
  * scheme, and the CLI theme setting is the terminal's, not the app's: assume dark.
@@ -55,7 +53,6 @@ function toSnap(v: unknown): LimitsSnap | null {
 
 // Process-local facts (not in PluginState): a reload starts them over.
 let setting: TtlSetting = 'auto'
-let theme: Theme = 'terminal'
 let usage: UsageShown = 'remaining'
 let turnDone = false
 let timer: Timer | null = null
@@ -106,14 +103,12 @@ async function bump($: $T): Promise<void> {
 async function schedule($: $T): Promise<void> {
   const now = await $.clock.now()
   const { view, limits } = await viewAt($, now)
-  // An SVG theme redraws at most once a minute, unless a terminal (text, second ticks) is attached.
+  // The pips art redraws at most once a minute, unless a terminal (text, second ticks) is attached.
   let floor = 1000
-  if (theme !== 'text') {
-    try {
-      if (!(await $.session.surfaces()).includes('terminal')) floor = 60_000
-    } catch {
-      // unknown surfaces: keep text ticks
-    }
+  try {
+    if (!(await $.session.surfaces()).includes('terminal')) floor = 60_000
+  } catch {
+    // unknown surfaces: keep text ticks
   }
   const wait = Math.max(floor, nextWake(view, now, limits, floor) - now)
   timer?.cancel()
@@ -195,7 +190,6 @@ async function learnTtl($: $T, t: Ttl | null): Promise<void> {
 
 export const register: Register = (on, options) => {
   setting = isSetting(options.cacheTtl) ? options.cacheTtl : 'auto'
-  theme = isTheme(options.theme) ? options.theme : 'terminal'
   usage = isUsage(options.usage) ? options.usage : 'remaining'
   keepWarm = options.keepWarm === 'on'
   turnDone = false
@@ -403,9 +397,9 @@ export const register: Register = (on, options) => {
   // ---- render: no writes, next(e) on any error ----
 
   type Els = { Box: any; Text: any; Svg?: any }
-  // The Svg element where the surface has one and the theme wants art; else null (text).
+  // The Svg element where the surface has one (every surface but the terminal); else null (text).
   const svgOf = (surface: string, els: Els): any =>
-    theme !== 'text' && surface !== 'terminal' && 'Svg' in els && els.Svg ? els.Svg : null
+    surface !== 'terminal' && 'Svg' in els && els.Svg ? els.Svg : null
   const art = (Svg: any, a: Art, view: View) =>
     <Svg source={a.source} alt={altText(view)} width={a.width} height={a.height} />
   // Bar cells: the tone is the background. Track is the empty part.
@@ -442,7 +436,7 @@ export const register: Register = (on, options) => {
       const els = $.ui.resolve(e) as unknown as Els
       const Svg = svgOf(e.surface, els)
       if (Svg !== null && e.props.bodyColumns >= BAND_SVG_MIN) {
-        tree = art(Svg, bandSvg(view, e.props.bodyColumns, theme as ArtTheme, DARK), view)
+        tree = art(Svg, bandSvg(view, e.props.bodyColumns, DARK), view)
       } else {
         const segs = bandSegments(view, e.props.bodyColumns)
         // Too narrow to draw anything: the engine's own band.
